@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Toolsets, type CredentialDocument, type Workspace, type JsonObject } from "@cybros/agent"
+import { Toolsets, type CredentialDocument, type Workspace, type JsonObject, type StoreEntry } from "@cybros/agent"
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -18,7 +18,9 @@ const Declaration = Schema.Struct({
     image_model: Schema.NullOr(Schema.String),
     compaction_policy: Schema.Struct({ mode: Schema.String, model: Schema.optional(Schema.String) }),
   }),
-  prompt_documents: Schema.optional(Schema.Struct({ summarizer: Schema.NullOr(Schema.Struct({ content: Schema.String })) })),
+  prompt_documents: Schema.optional(
+    Schema.Struct({ summarizer: Schema.NullOr(Schema.Struct({ content: Schema.String })) }),
+  ),
 })
 
 const Announcement = Schema.Struct({
@@ -142,7 +144,7 @@ test.each([
   const subagentOff = { active: false }
   const announcements: (typeof Announcement.Type)[] = []
   const measured = new Date().toISOString()
-  const preset = {
+  const preset: StoreEntry = {
     public_id: "presets",
     namespace: "opencode.presets",
     key: "catalog",
@@ -300,16 +302,37 @@ test.each([
       }
       if (path === "/agent_api/v1/tools")
         return Response.json({
-          tools: Toolsets.names("conversation", "history", "skills", "images", "schedules").map((canonical_name) => ({
-            canonical_name,
-            name: canonical_name === "nexus.skill.load" ? "skill" : canonical_name.split(".").at(-1),
-            effect_profile: {},
-            definition: {},
-          })),
+          tools: Toolsets.names("conversation", "history", "skills", "images", "schedules", "memory").map(
+            (canonical_name) => ({
+              canonical_name,
+              name:
+                canonical_name === "nexus.memory.read"
+                  ? "memory_read"
+                  : canonical_name === "nexus.skill.load"
+                    ? "skill"
+                    : canonical_name.split(".").at(-1),
+              effect_profile: {},
+              definition: {},
+            }),
+          ),
         })
       if (path === "/agent_api/v1/profile/store_entries")
         return Response.json({ store_entries: [preset], pagination: { next_after: null } })
-      if (path === "/agent_api/v1/profile/store_entries/presets") return Response.json({ store_entry: preset })
+      if (path === "/agent_api/v1/profile/store_entries/presets") {
+        if (request.method === "PATCH") {
+          const body = Schema.decodeUnknownSync(
+            Schema.Struct({
+              store_entry: Schema.Struct({ lock_version: Schema.Int, value: Schema.MutableJson }),
+            }),
+          )(await request.json())
+
+          expect(body.store_entry.lock_version).toBe(preset.lock_version)
+          preset.value = body.store_entry.value
+          preset.lock_version++
+        }
+
+        return Response.json({ store_entry: preset })
+      }
       if (path.endsWith("/store_entries/binding")) return Response.json({ store_entry: binding })
       if (path.endsWith("/store_entries/modes")) return Response.json({ store_entry: modes })
       if (path.endsWith("/store_entries"))
@@ -734,6 +757,24 @@ test.each([
         })
         expect(await runtime.policy("workspace", "conversation")).toMatchObject({
           agent_configuration: { summarizer: null },
+        })
+
+        await runtime.manage({
+          action: "preset.replace",
+          id: "main-preset",
+          value: {
+            name: "Main",
+            description: "Selected tools",
+            configuration: { tools: ["memory_read"], runner_tool_names: [] },
+          },
+        })
+        expect(declarations.at(-1)?.configuration).toMatchObject({
+          kernel_tools: ["nexus.memory.read"],
+          runner_tool_names: [],
+        })
+        expect((await runtime.policy("workspace", "conversation")).agent_configuration).toMatchObject({
+          kernel_tools: ["nexus.memory.read"],
+          runner_tool_names: [],
         })
       }
       if (fixture.owned && !fixture.create) {
