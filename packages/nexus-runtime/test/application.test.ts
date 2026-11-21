@@ -3,6 +3,7 @@ import { Client, type JsonObject } from "@cybros/agent"
 import { createHash } from "node:crypto"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { InputAdmissions } from "../src/admission"
+import { presetInventory } from "../src/preset-mcp"
 import { NexusApplication } from "../src/application"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
@@ -480,3 +481,80 @@ test.each([
     }
   },
 )
+
+test("callable and canonical Preset names survive admission and a restricted role keeps its own selection", async () => {
+  const bodies: JsonObject[] = []
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/tools"))
+      return Response.json({
+        tools: [
+          { name: "memory_read", canonical_name: "nexus.memory.read", effect_profile: {}, definition: {} },
+          { name: "memory_write", canonical_name: "nexus.memory.write", effect_profile: {}, definition: {} },
+        ],
+      })
+    if (path.endsWith("/executors")) return Response.json({ executors: [] })
+    if (path.endsWith("/mcp_connections"))
+      return Response.json({ mcp_connections: [], pagination: { next_after: null } })
+    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      const body = (await request.json()) as { input: JsonObject }
+      bodies.push(body.input)
+      return Response.json({ input: inputFixture(body.input) }, { status: 202 })
+    }
+  })
+  const identity = { agent: "main", runner: "runner", workspace: "workspace" }
+  const base = { default_model: "provider/model", kernel_tools: ["nexus.memory.read", "nexus.memory.write"] }
+  const application = new NexusApplication(
+    fixture.client,
+    identity,
+    () => base,
+    undefined,
+    undefined,
+    undefined,
+    () => presetInventory(fixture.client, identity, [], base),
+  )
+  try {
+    const choices = await application.presets.command({ action: "preset.tools" })
+    expect(choices).toMatchObject({
+      tools: [{ name: "memory_read", canonical: "nexus.memory.read" }, { name: "memory_write" }],
+    })
+    expect(fixture.state.writes).toBe(0)
+    const catalog = await application.presets.catalog()
+    const parent = catalog.presets.find((entry) => entry.public_id === catalog.main_preset_public_id)!
+    const role = catalog.presets.find((entry) => entry.role?.name === "worker")!
+    await application.presets.command({
+      action: "preset.replace",
+      id: role.public_id,
+      value: { ...role, configuration: { tools: ["nexus.memory.write"] } },
+    })
+    await application.presets.command({
+      action: "preset.replace",
+      id: parent.public_id,
+      value: { ...parent, configuration: { tools: ["memory_read"] } },
+    })
+    const input = { workspace: "workspace", conversation: "conversation", key: "original", text: "Read memory" }
+    await application.submit(input)
+    expect(bodies[0].agent_configuration).toMatchObject({
+      kernel_tools: ["nexus.memory.read"],
+      delegation_catalog: expect.arrayContaining([
+        expect.objectContaining({
+          name: "worker",
+          declaration: expect.objectContaining({ kernel_tools: ["nexus.memory.write"] }),
+        }),
+      ]),
+    })
+    await application.presets.command({
+      action: "preset.replace",
+      id: parent.public_id,
+      value: { ...parent, configuration: { tools: [] } },
+    })
+    await application.submit({ ...input, key: "new" })
+    expect(bodies.at(-1)?.agent_configuration).toMatchObject({ kernel_tools: [] })
+    await application.submit(input)
+    expect(bodies[0].agent_configuration).toMatchObject({ kernel_tools: ["nexus.memory.read"] })
+    expect(bodies.at(-1)?.agent_configuration).toEqual(bodies[0].agent_configuration)
+  } finally {
+    fixture.server.stop(true)
+  }
+})

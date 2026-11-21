@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import type { JsonObject } from "@cybros/agent"
+import { NexusApplication } from "../src/application"
 import { Presets } from "../src/presets"
 import { Bots } from "../src/bots"
 import { storeFixture } from "./fixture/store"
@@ -117,17 +118,30 @@ test("Bot identities retain settings and recover switches without redirecting ac
     return Response.json({ error: { code: "not_found" } }, { status: 404 })
   })
   const adaptation = { prompt: "Keep the initial summary." }
-  const presets = new Presets(fixture.client, undefined, (policy) => summaryPrompt(policy, () => adaptation.prompt))
-  const bots = new Bots(
+  const application = new NexusApplication(
     fixture.client,
-    presets,
+    { agent: "main", runner: "runner", workspace: "workspace" },
     () => ({
       default_model: "provider/model",
       runner_tool_names: ["read", "write", "code"],
       compaction_policy: { mode: "kernel" },
     }),
-    "runner",
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => ({
+      code_mode: true,
+      subagent: true,
+      title_model: null,
+      summarizer: (policy) => summaryPrompt(policy, () => adaptation.prompt),
+    }),
   )
+  const presets = application.presets
+  const bots = application.bots
 
   try {
     const create = {
@@ -146,6 +160,19 @@ test("Bot identities retain settings and recover switches without redirecting ac
     ])
     const id = String((created as { public_id: string }).public_id)
 
+    const catalog = await presets.catalog()
+    const selected = catalog.presets.find((row) => row.name === "worker")!
+    await bots.command({ action: "bot.configure", id, settings: { preset_public_id: selected.public_id } })
+    await expect(presets.command({ action: "preset.remove", id: selected.public_id })).rejects.toThrow(
+      /in use by Bot .*assistant/i,
+    )
+    expect((await presets.catalog()).presets).toContainEqual(selected)
+    await bots.command({
+      action: "bot.configure",
+      id,
+      settings: { preset_public_id: catalog.default_bot_preset_public_id },
+    })
+    await presets.command({ action: "preset.remove", id: selected.public_id })
     expect(conversations.size).toBe(0)
     await bots.command({ action: "bot.read", id })
     expect(conversations.size).toBe(0)
