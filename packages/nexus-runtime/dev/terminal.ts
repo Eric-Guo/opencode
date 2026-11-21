@@ -758,6 +758,33 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     const hint = heldTaskHint(object(object(result).task))
     if (hint) terminal.error(hint + "\n")
   }
+  if (parsed.verb === "approve") {
+    const response = object(result)
+    const grant = response.grant === undefined ? undefined : object(response.grant)
+
+    if (grant) {
+      if (parsed.values.json) print(result)
+      else {
+        terminal.write("approved: " + parsed.args[1] + "\n")
+        if (typeof grant.refused === "string") {
+          terminal.error("The call was approved. The session grant was refused (" + grant.refused + ").\n")
+        } else if (grant.already === true) {
+          terminal.write("granted: (already granted this session)\n")
+        } else {
+          const rule = object(grant.rule)
+          const pattern = rule.match === undefined ? "" : " " + rule.path + " = " + JSON.stringify(rule.match)
+
+          terminal.write("granted: " + rule.tool + pattern + "\n")
+        }
+      }
+
+      return typeof grant.refused === "string" ? 1 : 0
+    }
+  }
+  if (parsed.verb === "phases" && !parsed.values.json) {
+    terminal.write(formatPhases(result))
+    return 0
+  }
   if (parsed.verb === "transcript" && !parsed.values.json) {
     const page = object(result)
     const rounds = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(page.rounds)
@@ -833,6 +860,49 @@ function formatRestoration(restoration: JsonObject) {
     lines.push(["runner:", row.runner_executor_public_id, row.status, ...details].join(" "))
   }
   return lines.join("\n") + "\n"
+}
+
+function formatPhases(result: JsonValue) {
+  const report = object(result)
+  const rows = Schema.decodeUnknownSync(Schema.Array(ObjectValue))
+  const phases = rows(report.phases)
+  const background = rows(report.background)
+  const spend = object(report.spend)
+  const byModel = Object.entries(object(spend.by_model ?? {}))
+  const usage = (part: JsonObject) =>
+    part.input_tokens +
+    " in, " +
+    part.output_tokens +
+    " out" +
+    (part.cost_amount == null ? "" : (" — " + part.cost_amount + " " + (part.cost_unit ?? "")).trimEnd())
+
+  return (
+    [
+      ...(phases.length
+        ? phases.map(
+            (phase, index) =>
+              (index === report.current ? "> " : "  ") +
+              phase.label +
+              "  " +
+              phase.done +
+              "/" +
+              phase.total +
+              "  " +
+              phase.status,
+          )
+        : ["(no phases yet)"]),
+      ...background.map(
+        (task) =>
+          "background: " +
+          task.key +
+          " " +
+          task.status +
+          (task.result_delivered_at ? "  (delivered " + task.result_delivered_at + ")" : ""),
+      ),
+      "spend:     " + usage(spend),
+      ...(byModel.length > 1 ? byModel.map(([model, part]) => "  " + model + "  " + usage(object(part))) : []),
+    ].join("\n") + "\n"
+  )
 }
 
 function heldTaskHint(task: JsonObject) {

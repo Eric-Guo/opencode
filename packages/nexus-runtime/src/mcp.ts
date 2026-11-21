@@ -11,6 +11,7 @@ import type { HostTools } from "./host"
 import { curateMcp, curateMcpDocuments, mcpAnnouncementBytes, mcpCaptureExtensions } from "./mcp-curation"
 import { mcpExchange } from "./mcp-exchange"
 import { mcpRedact, mcpSettings, type McpRow } from "./mcp-settings"
+import { integrationSecrets, mcpChildEnvironment } from "./integration-secrets"
 
 const Command = Schema.Struct({
   server: Schema.NonEmptyString,
@@ -57,33 +58,41 @@ export async function activateMcp(
       .slice(0, 4)
 
     credentials.set(row.server, tokens)
-    row.secrets = [...new Set([...(staticSecrets.get(row.server) ?? []), ...tokens])].sort(
-      (a, b) => b.length - a.length,
-    )
+    row.secrets = integrationSecrets([...(staticSecrets.get(row.server) ?? []), ...tokens])
   }
 
   api.onShutdown(() => Effect.runPromise(Scope.close(scope, Exit.void)))
   api.describeStatus(() => ({ ready: !issues.length, issues: [...issues, ...skippedSchemas] }))
-  const registrations = new Map<string, Effect.Effect<void>>()
-  for (const row of settings.rows) {
-    if (!row.config) continue
-    const config = row.config
-    const registration = await Effect.runPromise(
+  const register = (row: McpRow, config: NonNullable<McpRow["config"]>, scope: Scope.Scope, probe?: string) =>
+    Effect.runPromise(
       mcp
         .transform((editor) => {
-          editor.set(row.server, config, {
-            credentialKey: row.credentialKey,
-            redactErrors: true,
-            roots: false,
-            elicitation: false,
-            listChanged: false,
-            events: false,
-            reconnectOnFailure: true,
-          })
+          editor.set(
+            probe ?? row.server,
+            config.type === "local"
+              ? { ...config, environment: mcpChildEnvironment(config.environment ?? {}) }
+              : config,
+            {
+              credentialKey: row.credentialKey,
+              redactErrors: true,
+              replaceStdioEnvironment: config.type === "local",
+              readOnlyCredentials: probe !== undefined,
+              roots: false,
+              elicitation: false,
+              listChanged: false,
+              events: false,
+              reconnectOnFailure: true,
+            },
+          )
         })
         .pipe(Scope.provide(scope)),
       { signal: api.signal },
     )
+  const registrations = new Map<string, Effect.Effect<void>>()
+  for (const row of settings.rows) {
+    if (!row.config) continue
+    const registration = await register(row, row.config, scope)
+
     registrations.set(row.server, registration.dispose)
   }
 
@@ -335,26 +344,7 @@ export async function activateMcp(
     const scope = await Effect.runPromise(Scope.make())
     const name = row.server + "-probe-" + crypto.randomUUID()
     try {
-      await Effect.runPromise(
-        mcp
-          .transform((editor) => {
-            editor.set(
-              name,
-              { ...row.config!, disabled: false },
-              {
-                credentialKey: row.credentialKey,
-                redactErrors: true,
-                readOnlyCredentials: true,
-                roots: false,
-                elicitation: false,
-                listChanged: false,
-                reconnectOnFailure: true,
-              },
-            )
-          })
-          .pipe(Scope.provide(scope)),
-        { signal: api.signal },
-      )
+      await register(row, { ...row.config, disabled: false }, scope, name)
       const servers = await Effect.runPromise(
         mcp.servers().pipe(
           Effect.repeat({
