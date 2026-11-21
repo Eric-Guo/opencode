@@ -243,17 +243,16 @@ export class T3Client {
       await this.options.configure([{ op: "set", path: ["token"], value: token }])
       return { bearer: "saved", restart_required: true }
     }
-    const projects = await this.projects()
     if (value.action === "t3.project") {
-      const project = projects.find((row) => row.id === value.id)
+      const project = (await this.projects()).find((row) => row.id === value.id)
       if (!project) throw new Error("Choose an ID from t3.projects.")
       await this.options.configure([{ op: "set", path: ["project_id"], value: project.id }])
       return project
     }
     if (value.action === "t3.create") {
-      if (!value.path || !isAbsolute(value.path))
-        throw new Error("Supply an absolute path in T3's execution environment.")
-      const matches = projects.filter((row) => row.workspaceRoot === value.path)
+      const path = value.path?.trim()
+      if (!path || !isAbsolute(path)) throw new Error("Supply an absolute path in T3's execution environment.")
+      const matches = (await this.projects()).filter((row) => row.workspaceRoot === path)
       if (matches.length > 1) throw new Error("Several T3 projects use this path; choose an ID.")
       const project =
         matches[0] ??
@@ -265,15 +264,15 @@ export class T3Client {
               type: "project.create",
               commandId: crypto.randomUUID(),
               projectId: crypto.randomUUID(),
-              title: basename(value.path),
-              workspaceRoot: value.path,
+              title: basename(path),
+              workspaceRoot: path,
             },
             this.options.signal,
           )
           .then((row) => Schema.decodeUnknownSync(Projects.fields.projects.value)(row))
           .catch(async (error: unknown) => {
             if (!(error instanceof T3Uncertain)) throw error
-            const found = (await this.projects()).filter((row) => row.workspaceRoot === value.path)
+            const found = (await this.projects()).filter((row) => row.workspaceRoot === path)
             if (found.length !== 1)
               throw new T3Uncertain("Project creation was not confirmed; inspect t3.projects before creating again.")
             return found[0]

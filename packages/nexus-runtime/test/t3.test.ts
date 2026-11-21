@@ -592,3 +592,44 @@ test("T3 refuses to adopt or stop another service already using its configured p
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test("project setup validates locally, reconciles a lost creation response and adopts the same directory", async () => {
+  const projects: { id: string; title: string; workspaceRoot: string }[] = []
+  const requests: string[] = []
+  const selections: unknown[] = []
+  using peer = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      requests.push(request.method + " " + new URL(request.url).pathname)
+      if (request.method === "GET") return Response.json({ projects })
+      const input = (await request.json()) as { projectId: string; title: string; workspaceRoot: string }
+      projects.push({ id: input.projectId, title: input.title, workspaceRoot: input.workspaceRoot })
+      return new Response("{")
+    },
+  })
+  const client = new T3Client(
+    { url: peer.url.origin, token: "bearer" },
+    {
+      signal: new AbortController().signal,
+      storage: tmpdir(),
+      directory: tmpdir(),
+      application() {
+        throw new Error("Unexpected Nexus request")
+      },
+      configure: async (changes) => {
+        selections.push(changes)
+      },
+    },
+  )
+  for (const path of [" ", " relative "])
+    await expect(client.command({ action: "t3.create", path })).rejects.toThrow("absolute path")
+  expect(requests).toEqual([])
+  expect(selections).toEqual([])
+  const created = await client.command({ action: "t3.create", path: " /work/project " })
+  expect(created).toEqual(projects[0])
+  expect(created).toMatchObject({ workspaceRoot: "/work/project", title: "project" })
+  expect(await client.command({ action: "t3.create", path: "/work/project" })).toEqual(created)
+  expect(requests).toEqual(["GET /api/projects", "POST /api/projects/mutate", "GET /api/projects", "GET /api/projects"])
+  expect(selections).toEqual(Array(2).fill([{ op: "set", path: ["project_id"], value: projects[0].id }]))
+})
