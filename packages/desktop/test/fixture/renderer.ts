@@ -59,6 +59,7 @@ export async function rendererFixture(url: string, storage?: StateStore, main?: 
           if (win) setPanelPresentation(win, contents, value)
         }),
       WindowThemeReady: () => Effect.void,
+      WindowRequestAttention: () => Effect.void,
       WindowRequestMicrophone: () => Effect.succeed(false),
       WindowSetVoiceCallActive: () => Effect.void,
       WindowGetFocused: () => Effect.succeed(true),
@@ -73,6 +74,10 @@ export async function rendererFixture(url: string, storage?: StateStore, main?: 
       WindowSetPinchZoomEnabled: () => Effect.void,
       WindowSetTitlebar: () => Effect.void,
       WindowSetTrafficLightsPosition: () => Effect.void,
+      WindowSetTaskbarBadge: () => Effect.void,
+      WindowSetTaskbarProgress: () => Effect.void,
+      WindowShowToast: () => Effect.void,
+      WindowDismissToast: () => Effect.void,
     }),
     StorageRpcs.toLayer({
       StorageItems: ({ name }) => Effect.sync(() => storage?.items(name) ?? { items: {}, revision: 0 }),
