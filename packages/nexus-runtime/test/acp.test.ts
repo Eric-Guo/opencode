@@ -466,6 +466,22 @@ test("delegation bounds UTF-8 answer and progress while publishing omitted outpu
     ])
     expect(JSON.stringify(lines.content)).not.toContain("omitted last line")
     expect(transcripts[1]).toContain("omitted last line")
+    const session = sessionID(bytes.structured_content).session
+    for (let index = 0; index < 2; index++)
+      await tool.execute({ agent: "peer", session, prompt: "output-bytes" }, context)
+
+    const capture = transcripts.at(-1)!
+    expect(capture.length).toBeGreaterThan(65536)
+    expect(await client.command({ action: "acp.logs", session })).toBe(capture)
+    await client.command({ action: "acp.kill", session })
+    const retired = String(await client.command({ action: "acp.logs", session }))
+    expect(retired.startsWith(capture)).toBe(true)
+    expect(
+      retired
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toContainEqual(expect.objectContaining({ message: expect.objectContaining({ method: "initialize" }) }))
   } finally {
     await client.close()
     await fixture.close()

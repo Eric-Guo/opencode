@@ -16,6 +16,7 @@ type Reference =
   | { source: "executor"; executor_public_id: string; server_key: string }
 export type McpDirectory = Array<{
   ref: Reference
+  previous_ref?: Reference
   name: string
   account_label: string | null
   available: boolean
@@ -32,13 +33,27 @@ const Remote = Schema.Struct({
   description: Schema.String,
   input_schema: Schema.Record(Schema.String, Schema.MutableJson),
 })
+const Choice = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  canonical: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  function: Schema.optional(Schema.Struct({ name: Schema.String, description: Schema.optional(Schema.String) })),
+})
+export type PresetInventory = Awaited<ReturnType<typeof presetInventory>>
 const Provenance = Schema.Struct({ server_key: Schema.String, tool_name: Schema.String })
 
-export async function mcpDirectory(member: Client, agent: string, agentTools: AnnouncedTool[]): Promise<McpDirectory> {
+export async function presetInventory(
+  member: Client,
+  identity: { agent: string; runner: string },
+  agentTools: AnnouncedTool[],
+  base: AgentConfigurationInput,
+) {
+  const [kernel, executors] = await Promise.all([member.tools.list(), member.executors.list({ role: "runner" })])
+  const candidates = executors.filter((row) => base.runner_executor_public_ids?.includes(row.public_id))
   const directory: McpDirectory = []
   let after: string | undefined
   do {
-    const page = await member.mcpConnections.list({ after, limit: 100, agent_public_id: agent })
+    const page = await member.mcpConnections.list({ after, limit: 100, agent_public_id: identity.agent })
     directory.push(
       ...page.items.map((connection) => {
         const ref = { source: "nexus" as const, connection_public_id: connection.public_id }
@@ -49,19 +64,58 @@ export async function mcpDirectory(member: Client, agent: string, agentTools: An
           available: connection.available,
           tools: connection.tools.map((value) => {
             const tool = Schema.decodeUnknownSync(Remote)(value)
-            return { ...tool, callable_name: mcpCallable(ref, tool.name) }
+            const imported = base.mcp_tools?.find(
+              (entry) => entry.connection_public_id === connection.public_id && entry.tool_name === tool.name,
+            )
+            return { ...tool, callable_name: imported?.name ?? mcpCallable(ref, tool.name) }
           }),
         }
       }),
     )
     after = page.next_after ?? undefined
   } while (after)
-  directory.push(...executorConnections(agent, agentTools, false))
-  for (const executor of await member.executors.list({ role: "runner" }))
+  for (const row of executorConnections(identity.runner, agentTools, false)) {
+    directory.push({
+      ...row,
+      previous_ref: { source: "executor", executor_public_id: identity.agent, server_key: row.name },
+    })
+  }
+  for (const executor of candidates)
     directory.push(
       ...executorConnections(executor.public_id, executor.services.runner?.tools ?? [], true, executor.display_name),
     )
-  return directory
+  const tools = new Map<string, NexusPreset.ToolChoices["tools"][number]>()
+  for (const tool of kernel.filter((tool) => base.kernel_tools?.includes(tool.canonical_name))) {
+    tools.set(tool.name, {
+      name: tool.name,
+      canonical: tool.canonical_name,
+      kind: "kernel",
+      ...(tool.template && { description: tool.template }),
+    })
+  }
+  for (const entry of withoutMcp(base.tool_definitions ?? [], directory)) {
+    const tool = Schema.decodeUnknownSync(Choice)(entry)
+    const name = tool.function?.name ?? tool.name
+    if (!name) continue
+    const description = tool.description ?? tool.function?.description ?? tools.get(name)?.description
+    tools.set(name, {
+      name,
+      ...(tool.canonical && { canonical: tool.canonical }),
+      kind: tool.canonical ? "kernel" : "agent",
+      ...(description && { description }),
+    })
+  }
+  const runners = new Map<string, NexusPreset.ToolChoices["tools"][number]>()
+  for (const tool of candidates.flatMap((row) => row.services.runner?.tools ?? [])) {
+    if (
+      !tool.mcp &&
+      tool.description &&
+      tool.input_schema &&
+      (base.runner_tool_names == null || base.runner_tool_names.includes(tool.name))
+    )
+      runners.set(tool.name, { name: tool.name, kind: "runner", description: tool.description })
+  }
+  return { directory, tools: [...tools.values(), ...runners.values()], kernel }
 }
 
 function executorConnections(
@@ -120,12 +174,18 @@ export function mcpCallable(reference: Reference, name: string) {
 
 export function selectedMcp(directory: McpDirectory, selection?: NexusPreset.Configuration["mcp"]) {
   return directory.flatMap((connection) => {
-    if (!connection.available || selection?.disabled_connections.some((ref) => isDeepStrictEqual(ref, connection.ref)))
+    const references = connection.previous_ref ? [connection.ref, connection.previous_ref] : [connection.ref]
+    if (
+      !connection.available ||
+      selection?.disabled_connections.some((ref) => references.some((value) => isDeepStrictEqual(ref, value)))
+    )
       return []
     return connection.tools
       .filter(
         (tool) =>
-          !selection?.disabled_tools.some((ref) => isDeepStrictEqual(ref, { ...connection.ref, tool_name: tool.name })),
+          !selection?.disabled_tools.some((ref) =>
+            references.some((value) => isDeepStrictEqual(ref, { ...value, tool_name: tool.name })),
+          ),
       )
       .map((tool) => ({ ref: connection.ref, tool }))
   })
