@@ -2,7 +2,14 @@ import { executionSnapshot, repairTaskKey } from "./execution"
 import { createHash } from "node:crypto"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
-import { APIError, MalformedResponse, TransportError, type Input, type JsonValue } from "@cybros/agent"
+import {
+  APIError,
+  MalformedResponse,
+  TransportError,
+  type ExecutionDecision,
+  type Input,
+  type JsonValue,
+} from "@cybros/agent"
 import type { Nexus } from "@opencode/schema/nexus"
 import type { NexusApplication } from "./application"
 import { StoreDocument } from "./document"
@@ -586,6 +593,10 @@ export class TelegramIngress {
         await this.api(connection)
           .call("answerCallbackQuery", { callback_query_id: update.value.callback_query.id })
           .catch(() => {})
+      if (callback && !callbackDelivery) {
+        await finish("This decision is no longer pending.")
+        return
+      }
       if (
         ![
           "help",
@@ -763,7 +774,7 @@ export class TelegramIngress {
             row.status === "sent" &&
             (row.kind === "participation"
               ? current.participation?.candidate?.id !== row.id
-              : !["question", "approval"].includes(row.kind) ||
+              : !["question", "approval", "local"].includes(row.kind) ||
                 current.work.some((work) => work.input === row.input && work.terminal)),
         )
         if (!retired.length) return current
@@ -1240,34 +1251,56 @@ export class TelegramIngress {
       })
       return
     }
-    for (const decision of await execution.decisions({ signal: this.signal })) {
+    const run = snapshot?.execution.run_public_id
+    if (!run) return
+
+    const pending = (await execution.decisions({ signal: this.signal })).map((decision) => {
       const task = decision.detail.task.key
-      await document.change((state) => ({
+      const id = key(work.id, "decision", run, task)
+      return {
+        id,
+        run,
+        task,
+        route: work.route,
+        requester: work.requester,
+        target: work.target,
+        input: work.input,
+        ...telegramDecision(decision, id),
+        status: "pending" as const,
+      }
+    })
+    await document.change((state) => {
+      const stale = state!.deliveries.filter(
+        (row) =>
+          row.input === work.input &&
+          ["approval", "question", "local"].includes(row.kind) &&
+          !pending.some((current) => current.id === row.id && current.kind === row.kind && current.text === row.text),
+      )
+      const fresh = pending.filter(
+        (row) => !state!.deliveries.some((saved) => saved.id === row.id && !stale.includes(saved)),
+      )
+      if (!stale.length && !fresh.length) return state!
+      return {
         ...state!,
-        deliveries: enqueue(state!.deliveries, {
-          id: key(work.id, "decision", task),
-          route: work.route,
-          requester: work.requester,
-          target: work.target,
-          input: work.input,
-          task,
-          text:
-            decision.kind === "approval"
-              ? "Approve " +
-                decision.detail.task.tool_name +
-                "?\n" +
-                JSON.stringify(decision.detail.tool_input).slice(0, 3000) +
-                "\nReply /approve or /deny."
-              : "Question (" +
-                key(work.id, "decision", task).slice(0, 12) +
-                ")\n" +
-                (decision.detail.prompt ?? "Answer requested") +
-                "\nReply /answer followed by your answer.",
-          kind: decision.kind === "approval" ? "approval" : "question",
-          status: "pending",
-        }),
-      }))
-    }
+        deliveries: [...state!.deliveries.filter((row) => !stale.includes(row)), ...fresh],
+        messages: [
+          ...(state!.messages ?? []),
+          ...stale
+            .filter((row) => row.message !== undefined)
+            .map((row) => ({
+              id: row.id,
+              input: row.input,
+              route: row.route,
+              target: row.target,
+              requester: row.requester,
+              kind: row.kind,
+              status: row.status,
+              message: row.message,
+              text: "",
+            })),
+        ],
+      }
+    })
   }
 
   private async deliver(document: StateDocument, initial: TelegramDelivery, now: number, bot: string) {
@@ -1935,19 +1968,32 @@ export class TelegramIngress {
     }
     if (["approve", "deny", "answer"].includes(action)) {
       const choices = state.deliveries.filter(
-        (row) => ["approval", "question"].includes(row.kind) && (owner || row.requester === update.requester),
+        (row) =>
+          ["approval", "question"].includes(row.kind) &&
+          sameRoute(row.route, route) &&
+          row.run &&
+          (row.status === "sent" ||
+            (row.status === "uncertain" && update.value.callback_query && row.id === reply?.id)) &&
+          (owner || row.requester === update.requester),
       )
-      const selected = reply ?? (choices.length === 1 ? choices[0] : undefined)
+      const selected = reply
+        ? choices.find((row) => row.id === reply.id && row.task === reply.task)
+        : update.reply === undefined && choices.length === 1
+          ? choices[0]
+          : undefined
       if (!selected?.input || !selected.target || !selected.task || (!owner && selected.requester !== update.requester))
         return "Reply to your specific pending request with the decision."
       const work = state.work.find((work) => work.input === selected.input)
       if (!work) return "The original request is no longer available."
       const execution = telegramExecution(this.application(), work)
-      await execution.recover({ signal: this.signal }).then(executionSnapshot)
+      const snapshot = await execution.recover({ signal: this.signal })
+      if (snapshot?.execution.run_public_id !== selected.run) return "This decision is no longer pending."
       const decision = (await execution.decisions({ signal: this.signal })).find(
         (row) => row.detail.task.key === selected.task,
       )
       if (!decision) return "This decision is no longer pending."
+      const current = telegramDecision(decision, selected.id)
+      if (current.kind !== selected.kind || current.text !== selected.text) return "This decision is no longer pending."
       if (decision.kind === "approval" && !owner) return "Only the Bot owner can approve or deny tool requests."
       if (decision.kind === "approval" && action === "approve") await decision.task.approve({ signal: this.signal })
       else if (decision.kind === "approval" && action === "deny")
@@ -2233,6 +2279,39 @@ function queueOwner(state: TelegramState, route: TelegramDelivery["route"], requ
           (row.execution?.run_public_id ?? row.draft?.run) === input.expected_steering_run_public_id)),
   )
 }
+function telegramDecision(decision: ExecutionDecision, id: string) {
+  const detail = decision.detail
+  if (detail.fields) return { kind: "local" as const, text: "Review and answer this structured request in OpenCode." }
+
+  const task = detail.task
+  const target = task.target
+  const question =
+    decision.kind === "ask"
+      ? (detail.prompt ?? "Answer requested")
+      : [
+          "Approve " + (task.tool_alias || task.tool_name) + "?",
+          ...(target?.kind === "mcp"
+            ? [
+                "MCP connection: " +
+                  (target.display_name && target.connection_public_id
+                    ? target.display_name + " (" + target.connection_public_id + ")"
+                    : target.display_name || target.connection_public_id || "Unknown"),
+                ...(target.account_label ? ["Account: " + target.account_label] : []),
+                "Remote tool: " + (target.tool_name || task.tool_name),
+              ]
+            : []),
+          JSON.stringify(detail.tool_input, null, 2),
+        ].join("\n")
+  if (Array.from(question).length > 2000)
+    return { kind: "local" as const, text: "The full request is too large for Telegram. Review it in OpenCode." }
+  if (decision.kind === "ask")
+    return {
+      kind: "question" as const,
+      text: "Question (" + id.slice(0, 12) + ")\n" + question + "\nReply /answer followed by your answer.",
+    }
+  return { kind: "approval" as const, text: question + "\nReply /approve or /deny." }
+}
+
 function enqueue(rows: readonly TelegramDelivery[], delivery: TelegramDelivery): TelegramDelivery[] {
   return rows.some((row) => row.id === delivery.id) ? [...rows] : [...rows, delivery]
 }

@@ -6,6 +6,7 @@ import {
   type TaskDetail,
   type TranscriptItem,
 } from "@cybros/agent"
+import { resolve } from "node:path"
 import { Schema } from "effect"
 
 const Call = Schema.Struct({
@@ -14,6 +15,7 @@ const Call = Schema.Struct({
   tool: Schema.optional(Schema.NullOr(Schema.String)),
   title: Schema.optional(Schema.NullOr(Schema.String)),
   status: Schema.optional(Schema.String),
+  is_error: Schema.optional(Schema.NullOr(Schema.Boolean)),
   output_preview: Schema.optional(Schema.NullOr(Schema.String)),
 })
 
@@ -29,6 +31,7 @@ export class EditorTranscript {
   constructor(
     private readonly session: string,
     private readonly client: AgentContext,
+    private readonly root: string,
     private readonly detail?: (run: string, task: string) => Promise<TaskDetail>,
   ) {}
 
@@ -97,93 +100,84 @@ export class EditorTranscript {
     return this.message(text)
   }
 
-  async call(run: string, call: typeof Call.Type) {
+  async call(run: string, call: typeof Call.Type, captured?: TaskDetail) {
     if (this.branches.has(run + ":" + call.task_key.replace(/t\d+$/, ""))) return
 
     const id = run + ":" + call.task_key
-    const key = JSON.stringify([call.status, call.output_preview])
+    const key = JSON.stringify([call.status, call.is_error === true, call.output_preview])
     const previous = this.tools.get(id)
 
-    if (key === previous) return
+    if (key === previous) return this.queue
 
     this.tools.set(id, key)
     const status: ToolCallStatus =
-      call.status === "completed"
-        ? "completed"
-        : ["failed", "timed_out", "uncertain", "canceled", "skipped"].includes(call.status ?? "")
-          ? "failed"
-          : ["waiting", "needs_approval"].includes(call.status ?? "")
-            ? "pending"
-            : "in_progress"
+      call.is_error === true
+        ? "failed"
+        : call.status === "completed"
+          ? "completed"
+          : ["failed", "timed_out", "uncertain", "canceled", "skipped"].includes(call.status ?? "")
+            ? "failed"
+            : ["waiting", "needs_approval"].includes(call.status ?? "")
+              ? "pending"
+              : "in_progress"
 
-    if (previous === undefined)
-      await this.send(async () => {
-        const detail = await this.detail?.(run, call.task_key).catch(() => undefined)
-        const input = detail?.tool_input ?? {}
-        const name = detail?.task.tool_name ?? call.tool ?? call.name ?? call.task_key
-        const remote = detail?.task.target?.kind === "mcp" || name.startsWith("mcp__")
-        const kind: ToolKind = remote
-          ? "other"
-          : /^(read|ls|read_process|list_processes|files_bytes|browser_snapshot|browser_screenshot)$/.test(name)
-            ? "read"
-            : /^(grep|find)$/.test(name)
-              ? "search"
-              : /^(write|edit)$/.test(name)
-                ? "edit"
-                : /^(bash|start_process|stop_process|checkpoint_restore)$/.test(name)
-                  ? "execute"
-                  : /^(web_fetch|browser_navigate)$/.test(name)
-                    ? "fetch"
-                    : "other"
-        const content: ToolCallContent[] =
-          !remote &&
-          typeof input.path === "string" &&
-          (name === "write" || name === "edit") &&
-          typeof (input.content ?? input.newText) === "string"
-            ? [
-                {
-                  type: "diff",
-                  path: input.path,
-                  newText: String(input.content ?? input.newText),
-                  oldText: typeof input.oldText === "string" ? input.oldText : null,
-                },
-              ]
-            : []
+    return this.send(async () => {
+      const detail =
+        previous === undefined
+          ? (captured ?? (await this.detail?.(run, call.task_key).catch(() => undefined)))
+          : undefined
+      if (previous === undefined) {
+        const identity = editorCall(call.task_key, detail, call)
+        const input = identity.rawInput
+        const path = typeof input.path === "string" && input.path ? resolve(this.root, input.path) : undefined
+        const content: ToolCallContent[] = []
+        const locations =
+          detail?.task.target?.kind === "mcp" || (detail?.task.tool_name ?? call.tool ?? call.name)?.startsWith("mcp__")
+            ? []
+            : ["path", "file", "directory", "dir"].flatMap((field) => {
+                const value = input[field]
+                return typeof value === "string" && value ? [{ path: resolve(this.root, value) }] : []
+              })
+
+        if (identity.kind === "edit" && path) {
+          const edits = Array.isArray(input.edits)
+            ? input.edits
+            : [{ oldText: input.oldText, newText: input.content ?? input.newText }]
+          for (const edit of edits) {
+            if (!edit || typeof edit !== "object" || Array.isArray(edit) || typeof edit.newText !== "string") continue
+            content.push({
+              type: "diff",
+              path,
+              newText: edit.newText,
+              ...(typeof edit.oldText === "string" ? { oldText: edit.oldText } : {}),
+            })
+          }
+        }
 
         await this.client.notify("session/update", {
           sessionId: this.session,
           update: {
             sessionUpdate: "tool_call",
             toolCallId: id,
-            title: call.title ?? name,
-            kind,
+            ...identity,
             status,
-            rawInput: input,
-            ...(!remote
-              ? {
-                  locations: ["path", "file", "directory", "dir"].flatMap((key) =>
-                    typeof input[key] === "string" ? [{ path: input[key] }] : [],
-                  ),
-                  content,
-                }
-              : {}),
+            ...(locations.length ? { locations } : {}),
+            ...(content.length ? { content } : {}),
           },
         })
-      })
-    if (previous !== undefined || call.output_preview)
-      await this.send(() =>
-        this.client.notify("session/update", {
+      }
+      const preview = call.output_preview ?? ((status === "failed" || status === "completed") && detail?.output_preview)
+      if (previous !== undefined || preview)
+        await this.client.notify("session/update", {
           sessionId: this.session,
           update: {
             sessionUpdate: "tool_call_update",
             toolCallId: id,
             status,
-            ...(call.output_preview
-              ? { content: [{ type: "content", content: { type: "text", text: call.output_preview } }] }
-              : {}),
+            ...(preview ? { content: [{ type: "content", content: { type: "text", text: preview } }] } : {}),
           },
-        }),
-      )
+        })
+    })
   }
 
   private message(text: string, thought = false) {
@@ -208,5 +202,47 @@ export class EditorTranscript {
 
     this.queue = sent.catch(() => {})
     return sent
+  }
+}
+
+export function editorCall(key: string, detail?: TaskDetail, call?: typeof Call.Type) {
+  const rawInput = detail?.tool_input ?? {}
+  const name = detail?.task.tool_name ?? call?.tool ?? call?.name ?? key
+  const target = detail?.task.target
+  const remote = target?.kind === "mcp"
+  const callable = (remote && detail?.task.tool_alias) || name
+  const argument = [
+    ...["command", "pattern", "query", "url", "path", "prompt", "text", "name", "skill"].map((key) => rawInput[key]),
+    ...Object.values(rawInput),
+  ].find((value) => typeof value === "string" && value)
+  const title =
+    (!detail && call?.title) ||
+    [callable, typeof argument === "string" && argument.split(/\r?\n/, 1)[0]].filter(Boolean).join(" ")
+  const kind: ToolKind =
+    remote || name.startsWith("mcp__")
+      ? "other"
+      : /^(read|ls|read_process|list_processes|files_bytes|browser_snapshot|browser_screenshot)$/.test(name)
+        ? "read"
+        : /^(grep|find)$/.test(name)
+          ? "search"
+          : /^(write|edit)$/.test(name)
+            ? "edit"
+            : /^(bash|start_process|stop_process|checkpoint_restore)$/.test(name)
+              ? "execute"
+              : /^(web_fetch|browser_navigate)$/.test(name)
+                ? "fetch"
+                : "other"
+
+  return {
+    title: remote
+      ? title +
+        " (" +
+        [target.display_name || target.connection_public_id, target.account_label, target.tool_name || name]
+          .filter(Boolean)
+          .join(" · ") +
+        ")"
+      : title,
+    kind,
+    rawInput,
   }
 }
