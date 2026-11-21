@@ -45,7 +45,9 @@ test("MCP selection uses source identity, preserves ordinary name collisions, an
     const all = await presets.resolve(base)
     expect(all.configuration.delegation_catalog[0].inherited_tool_names).toEqual([name])
     expect(all.configuration.delegation_catalog[0].declaration.mcp_tools).toEqual([])
-    expect(all.configuration.delegation_catalog[0].declaration.tool_definitions).toEqual([])
+    expect(all.configuration.delegation_catalog[0].declaration.tool_definitions).toMatchObject([
+      { canonical: "nexus.conversation.spawn", function: { name: "spawn" } },
+    ])
     await presets.command({
       action: "preset.replace",
       id: catalog.main_preset_public_id,

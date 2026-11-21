@@ -14,6 +14,7 @@ import {
   type AgentConfigurationInput,
   type CredentialStore,
   type JsonObject,
+  type RequestOptions,
 } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { createHash } from "node:crypto"
@@ -32,7 +33,7 @@ import { Configuration } from "./configuration"
 import { ExtensionManager } from "./extension-manager"
 import { Packages } from "./packages"
 import { packageTools } from "./package-tools"
-import { capabilityConfiguration, compactionInstructions } from "./capabilities"
+import { capabilityConfiguration, summaryPrompt } from "./capabilities"
 import { mcpDirectory } from "./preset-mcp"
 import type { Nexus } from "@opencode/schema/nexus"
 import { executionConfiguration } from "./execution-settings"
@@ -69,6 +70,7 @@ import { ApplicationSettings } from "./settings"
 import { Adaptations } from "./adaptations"
 import { AgentRenewal, renewalClock } from "./renewal"
 import { McpSessions } from "./mcp-sessions"
+import { isSubagentTool } from "./bot-policy"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
 
@@ -184,10 +186,24 @@ export class NexusRuntime {
     )
   }
 
-  private summaryInstructions() {
-    const model = this.extensionManager?.list().find((extension) => extension.id === "nexus.compaction")
-      ?.configuration.model
-    return this.adaptations?.summarizer(typeof model === "string" ? model : undefined) ?? compactionInstructions
+  private readonly summarizer = (policy: AgentConfigurationInput["compaction_policy"]) =>
+    summaryPrompt(policy, (model) => this.adaptations?.summarizer(model))
+
+  private declareProfile(
+    member: Client,
+    configuration: AgentConfigurationInput,
+    options?: RequestOptions,
+    rules = this.siteRules(),
+  ) {
+    const summary = this.summarizer(configuration.compaction_policy)
+
+    return member.profile.declareConfiguration(
+      {
+        configuration: { ...configuration, approval_rules: rules },
+        prompt_documents: { summarizer: summary === null ? null : { content: summary } },
+      },
+      options,
+    )
   }
 
   conversationDefaults() {
@@ -548,41 +564,23 @@ export class NexusRuntime {
 
         const catalog = await member.tools.list({ signal })
         const available = new Set(catalog.map((tool) => tool.canonical_name))
+        const capabilities = capabilityConfiguration(
+          this.extensionManager?.list() ?? [],
+          this.applicationSettings.read().kernel_tools.filter((name) => available.has(name)),
+        )
+        const adapted = this.adaptations!.configuration(capabilities.kernel_tools, catalog)
+
         active.configuration = {
           ...active.configuration,
-          ...capabilityConfiguration(
-            this.extensionManager?.list() ?? [],
-            this.applicationSettings.read().kernel_tools.filter((name) => available.has(name)),
-          ),
-          ...this.adaptations!.configuration(
-            capabilityConfiguration(
-              this.extensionManager?.list() ?? [],
-              this.applicationSettings.read().kernel_tools.filter((name) => available.has(name)),
-            ).kernel_tools,
-            catalog,
-          ),
+          ...capabilities,
+          kernel_tools: adapted.kernel_tools,
           default_model: this.applicationSettings.read().default_model ?? settings.model,
           fallback_models: [...this.applicationSettings.read().fallback_models],
           runner_tool_names: refresh().map((tool) => tool.name),
-          tool_definitions: [
-            ...applicationTools(),
-            ...this.adaptations!.configuration(
-              capabilityConfiguration(
-                this.extensionManager?.list() ?? [],
-                this.applicationSettings.read().kernel_tools.filter((name) => available.has(name)),
-              ).kernel_tools,
-              catalog,
-            ).tool_definitions,
-          ],
+          tool_definitions: [...applicationTools(), ...adapted.tool_definitions],
         }
-        await member.profile.declareConfiguration(
-          {
-            configuration: { ...active.configuration, approval_rules: this.siteRules() },
-            prompt_documents: { summarizer: { content: this.summaryInstructions() } },
-          },
-          { signal },
-        )
-        await registered.sync(this.extensionManager?.agents() ?? [], active.configuration)
+        await this.declareProfile(member, active.configuration, { signal })
+        await registered.sync(this.extensionManager?.agents() ?? [], active.configuration, this.summarizer)
       }),
       () => {
         if (!this.connection) throw new Error("Nexus is disconnected.")
@@ -652,6 +650,8 @@ export class NexusRuntime {
         const catalog = await member.tools.list({ signal })
         const available = new Set(catalog.map((tool) => tool.canonical_name))
         const kernel = this.applicationSettings.read().kernel_tools.filter((name) => available.has(name))
+        const capabilities = capabilityConfiguration(this.extensionManager?.list() ?? [], kernel)
+        const adapted = this.adaptations!.configuration(capabilities.kernel_tools, catalog)
         const candidates = await member.executors.list({ role: "runner" }, { signal })
         const imports = process.env.OPENCODE_NEXUS_MCP_IMPORTS
         const configuration: AgentConfigurationInput = {
@@ -672,35 +672,17 @@ export class NexusRuntime {
                 )(imports),
               }
             : {}),
-          tool_definitions: [
-            ...applicationTools(),
-            ...this.adaptations!.configuration(
-              capabilityConfiguration(
-                this.extensionManager?.list() ?? [],
-                this.applicationSettings.read().kernel_tools.filter((name) => available.has(name)),
-              ).kernel_tools,
-              catalog,
-            ).tool_definitions,
-          ],
+          tool_definitions: [...applicationTools(), ...adapted.tool_definitions],
           default_model: this.applicationSettings.read().default_model ?? settings.model,
           fallback_models: [...this.applicationSettings.read().fallback_models],
           approval_mode: "ask",
           prompt_mechanism: "default",
-          ...capabilityConfiguration(this.extensionManager?.list() ?? [], kernel),
-          kernel_tools: this.adaptations!.configuration(
-            capabilityConfiguration(this.extensionManager?.list() ?? [], kernel).kernel_tools,
-            catalog,
-          ).kernel_tools,
+          ...capabilities,
+          kernel_tools: adapted.kernel_tools,
           runner_executor_public_ids: [...new Set([runner, ...candidates.map((row) => row.public_id)])],
           runner_tool_names: availableTools.map((tool) => tool.name),
         }
-        const profile = await member.profile.declareConfiguration(
-          {
-            configuration: { ...configuration, approval_rules: this.siteRules() },
-            prompt_documents: { summarizer: { content: this.summaryInstructions() } },
-          },
-          { signal },
-        )
+        const profile = await this.declareProfile(member, configuration, { signal })
         const identity = {
           agent: profile.member.public_id,
           name: profile.member.display_name ?? profile.member.handle,
@@ -750,6 +732,7 @@ export class NexusRuntime {
               bash_timeout_seconds: executionConfiguration(this.extensionManager?.list() ?? []).bashTimeoutSeconds,
               hints: (model) => this.adaptations?.hints(model) ?? "",
               adaptations: (model) => this.adaptations?.facts(model) ?? {},
+              summarizer: this.summarizer,
             }),
             join(this.storage, "admissions", admissionScope),
           ),
@@ -772,12 +755,10 @@ export class NexusRuntime {
             if (!active) return
             active.candidates = new Set([active.identity.runner, ...ids])
             active.configuration = { ...active.configuration, runner_executor_public_ids: [...active.candidates] }
-            await active.member.profile.declareConfiguration({
-              configuration: { ...active.configuration, approval_rules: this.siteRules() },
-            })
+            await this.declareProfile(active.member, active.configuration)
           },
         })
-        await registered.sync(this.extensionManager?.agents() ?? [], configuration)
+        await registered.sync(this.extensionManager?.agents() ?? [], configuration, this.summarizer)
         this.statusValue = { ...this.view("ready"), identity }
         await this.extensionManager?.emit("member.connected", identity)
         const ingress = new AbortController()
@@ -1049,12 +1030,7 @@ export class NexusRuntime {
           fn.name) === "code"
       )
         return []
-      if (
-        !modes.subagent &&
-        (["spawn", "delegate_task", "nexus.conversation.spawn", "nexus.graph.delegate_task"].includes(fn.name) ||
-          ["nexus.conversation.spawn", "nexus.graph.delegate_task"].includes(String(row.canonical)))
-      )
-        return []
+      if (!modes.subagent && isSubagentTool(fn.name, row.canonical, row.route)) return []
       return [fn.name]
     })
     const executor_contexts: Record<string, JsonObject> = {
@@ -1573,10 +1549,10 @@ export class NexusRuntime {
       if (this.approvals.some((value) => JSON.stringify(value.rule) === JSON.stringify(grant.rule)))
         return "already" as const
 
-      await active.member.profile.declareConfiguration(
-        { configuration: { ...active.configuration, approval_rules: [...this.siteRules(), grant.rule] } },
-        { signal: this.stop.signal },
-      )
+      await this.declareProfile(active.member, active.configuration, { signal: this.stop.signal }, [
+        ...this.siteRules(),
+        grant.rule,
+      ])
       this.approvals.push(grant)
       return "saved" as const
     })
@@ -1617,10 +1593,7 @@ export class NexusRuntime {
       const site = webSite(detail.tool_input?.url)
       if (this.sites.has(site)) return
       const rule = { tool: "web_fetch", path: "url", match: site + "/*", verdict: "allow" as const }
-      await active.member.profile.declareConfiguration(
-        { configuration: { ...active.configuration, approval_rules: [...this.siteRules(), rule] } },
-        { signal },
-      )
+      await this.declareProfile(active.member, active.configuration, { signal }, [...this.siteRules(), rule])
       this.sites.add(site)
     })
     this.declaring = pending.catch(() => {})
@@ -1669,12 +1642,9 @@ export class NexusRuntime {
     this.stop.abort()
     await this.declaring
     if (active && this.sites.size)
-      await active.member.profile
-        .declareConfiguration(
-          { configuration: { ...active.configuration, approval_rules: [] } },
-          { signal: AbortSignal.timeout(5000) },
-        )
-        .catch(() => {})
+      await this.declareProfile(active.member, active.configuration, { signal: AbortSignal.timeout(5000) }, []).catch(
+        () => {},
+      )
     await this.human.close()
     await this.pending?.catch(() => {})
     await this.work
