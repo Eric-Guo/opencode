@@ -30,6 +30,21 @@ test("captured directories provide placement while ordinary model reads may acce
   }
 })
 
+test.skipIf(process.platform !== "linux")(
+  "ls stats byte-preserving names before decoding their display text",
+  async () => {
+    const raw = Buffer.concat([Buffer.from(root + "/"), Buffer.from([0xff])])
+    await mkdir(raw)
+    try {
+      await writeFile(join(root, "B"), "")
+      expect(await execute(root, "ls", {}, signal)).toBe("B\n�/")
+    } finally {
+      // Remove by bytes too. Recursive string-based cleanup cannot address this directory.
+      await rm(raw, { recursive: true })
+    }
+  },
+)
+
 test("read pages complete lines, bounds giant lines, scrubs invalid UTF-8 and honors cancellation", async () => {
   const path = join(root, "text")
   await writeFile(path, Array.from({ length: 2100 }, (_, index) => "line " + (index + 1)).join("\n"))

@@ -587,6 +587,15 @@ test.each([
           { model: "provider/selected" },
           { model: "provider/updated" },
         ])
+        await runtime.manage({
+          action: "schedule.update",
+          workspace: "workspace",
+          conversation: "conversation",
+          id: "job",
+          version: 1,
+          prompt: "Updated prompt",
+        })
+        expect(scheduleWrites.at(-1)).toEqual({ expected_lock_version: 1, prompt: "Updated prompt" })
         expect(calls.find((call) => call.path.endsWith("/schedules/job/executions"))?.after).toBe("next-execution")
         const memory = { action: "application.memory", conversation: "conversation", command: "ls" } as const
 
