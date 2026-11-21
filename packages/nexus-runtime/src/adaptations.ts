@@ -7,7 +7,7 @@ import type { NexusSettings } from "@opencode/schema/nexus-settings"
 import data from "./adaptation-data.json"
 import { missing } from "./storage"
 
-// MIT-licensed reference data from Cybros 31b82029d75d1ed9626b80739e4caca16671b344,
+// MIT-licensed reference data from Cybros a91c63f44a0571f2a6cf08b85d7e568964441183,
 // sdks/ruby/lib/cybros_agent/model_adaptations. Nexus owns schema assembly.
 const Alias = Schema.Struct({
   name: Schema.NonEmptyString,
@@ -64,9 +64,25 @@ export class Adaptations {
           return { ...row, source: "local", path }
         }),
     )
-    const rows: Row[] = data.rows
-      .filter((row) => !local.some((entry) => entry.row === row.row))
-      .map((row) => ({ ...Schema.decodeUnknownSync(Row)(row), source: "bundled" }))
+    const bundled: Row[] = data.rows.map((row) => ({ ...Schema.decodeUnknownSync(Row)(row), source: "bundled" }))
+
+    for (const rows of [bundled, local]) {
+      const patterns = new Map<string, Row>()
+
+      for (const row of rows) {
+        for (const pattern of row.models) {
+          const prior = patterns.get(pattern)
+
+          if (prior)
+            throw new Error(
+              (row.path ?? row.row) + ": model pattern " + pattern + " also appears in " + (prior.path ?? prior.row),
+            )
+
+          patterns.set(pattern, row)
+        }
+      }
+    }
+    const rows = bundled.filter((row) => !local.some((entry) => entry.row === row.row))
     const result = new Adaptations([...rows, ...local], settings, model)
     if (!["auto", "off"].includes(settings.adaptations) && !result.rows.some((row) => row.row === settings.adaptations))
       throw new Error("Unknown adaptation row: " + settings.adaptations)
@@ -135,13 +151,16 @@ export class Adaptations {
   }
 
   summarizer(model?: string) {
-    return this.settings.adaptations === "off" ? null : this.choice(model).summarizer_prompt
+    return this.settings.adaptations === "off" ? null : (this.choice(model).summarizer_prompt ?? undefined)
   }
 
   configuration(names: string[], catalog: Awaited<ReturnType<Client["tools"]["list"]>>) {
     const row = this.choice()
-    if (this.settings.adaptations === "off") return { kernel_tools: names, tool_definitions: [] }
-    const aliases = this.aliases(row)
+    const off = this.settings.adaptations === "off"
+    const hidden = off ? new Set<string>() : this.hidden(row)
+    const kernel = names.filter((name) => !hidden.has(name))
+    const skill = "nexus.skill.load"
+    const aliases = (off ? [] : this.aliases(row))
       .filter((alias) => names.includes(alias.canonical))
       .map((alias) => {
         const template = catalog.find((tool) => tool.canonical_name === alias.canonical)?.template
@@ -153,10 +172,16 @@ export class Adaptations {
           ...(alias.description || alias.recut
             ? { description: alias.description ?? template!.replace(alias.recut!.anchor, alias.recut!.replacement) }
             : {}),
-          ...(alias.canonical === "nexus.skill.load" ? { defer_loading: true } : {}),
+          ...(alias.canonical === skill ? { defer_loading: true } : {}),
         })
       })
-    return { kernel_tools: names.filter((name) => !this.hidden(row).has(name)), tool_definitions: aliases }
+    const servedSkill = kernel.includes(skill) && catalog.find((tool) => tool.canonical_name === skill)
+
+    // A same-name alias overrides the plain declaration during Nexus assembly.
+    if (servedSkill && !aliases.some((alias) => alias.function.name === servedSkill.name))
+      aliases.push(toolAlias(servedSkill.name, skill, { defer_loading: true }))
+
+    return { kernel_tools: kernel, tool_definitions: aliases }
   }
 
   private aliases(row: Row) {

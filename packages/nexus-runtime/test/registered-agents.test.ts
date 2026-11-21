@@ -81,10 +81,10 @@ test("registered agents inherit the request model and retain ownership across re
   })
   const definition = { name: "room", description: "Shared room", system_prompt: "Help", configuration: {} }
   try {
-    await new RegisteredAgents(fixture.client).sync([definition], {
-      default_model: "provider/default",
-      runner_tool_names: ["read"],
-    })
+    await new RegisteredAgents(fixture.client).sync(
+      [definition],
+      { default_model: "provider/default", runner_tool_names: ["read"], compaction_policy: { mode: "kernel" } },
+    )
     const application = new NexusApplication(
       fixture.client,
       { agent: "main", runner: "runner", workspace: "workspace" },
@@ -121,11 +121,12 @@ test("registered agents inherit the request model and retain ownership across re
     expect(inputs.map((input) => input.model)).toEqual([{ model: "provider/request" }, { model: "provider/default" }])
     expect(declarations[0]).toMatchObject({
       system_prompt: "Help",
+      summarizer: expect.stringContaining("Goal:"),
       configuration: { default_model: null, runner_tool_names: ["read"] },
     })
     await new RegisteredAgents(fixture.client).sync(
-      [{ ...definition, configuration: { default_model: "provider/fixed" } }],
-      {},
+      [{ ...definition, configuration: { default_model: "provider/fixed", compaction_policy: { mode: "off" } } }],
+      { compaction_policy: { mode: "kernel" } },
     )
     await application.submit({
       key: "fixed-model",
@@ -136,7 +137,7 @@ test("registered agents inherit the request model and retain ownership across re
       answering_user_public_id: "room",
     })
     expect(inputs[2].model).toBeUndefined()
-    expect(declarations[1]).toMatchObject({ configuration: { default_model: "provider/fixed" } })
+    expect(declarations[1]).toMatchObject({ configuration: { default_model: "provider/fixed" }, summarizer: null })
     fault.loseDeclaration = true
     await expect(
       new RegisteredAgents(fixture.client).sync([{ ...definition, name: "second-room" }], {}),

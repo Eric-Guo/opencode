@@ -1,5 +1,5 @@
 import { executionConfiguration } from "./execution-settings"
-import { Toolsets } from "@cybros/agent"
+import { Toolsets, type AgentConfigurationInput } from "@cybros/agent"
 import type { Nexus } from "@opencode/schema/nexus"
 import type { ExtensionModule } from "./extension-manager"
 
@@ -15,6 +15,17 @@ Rules:
 - Tool results were cut to their head and may be incomplete: do not invent values, counts, paths or outputs that are not in the text. Name the file or command to re-read instead ("re-run the tests to see the failing names").
 - Keep exact identifiers verbatim: file paths, function names, error messages, commit hashes, task keys.
 - Write only the summary. No preamble, no closing remark, no advice to the reader.`
+
+export function summaryPrompt(
+  policy: AgentConfigurationInput["compaction_policy"],
+  adapted?: (model?: string) => string | null | undefined,
+) {
+  if (!policy || typeof policy !== "object" || Array.isArray(policy) || policy.mode !== "kernel") return null
+
+  const prompt = adapted?.(typeof policy.model === "string" ? policy.model : undefined)
+
+  return prompt === null ? null : (prompt ?? compactionInstructions)
+}
 
 export function capabilityExtensions(): ExtensionModule[] {
   return [
@@ -61,9 +72,10 @@ export function capabilityExtensions(): ExtensionModule[] {
 export function capabilityConfiguration(extensions: Nexus.Extension[], kernel: string[]) {
   const compaction = extensions.find((extension) => extension.id === "nexus.compaction" && extension.active)
   const images = extensions.find((extension) => extension.id === "nexus.images" && extension.active)
+  const imageModel = typeof images?.configuration.model === "string" ? images.configuration.model.trim() : ""
   const schedules = extensions.some((extension) => extension.id === "nexus.schedules" && extension.active)
   const hidden = new Set([
-    ...(!images ? Toolsets.names("images") : []),
+    ...(!imageModel ? Toolsets.names("images") : []),
     ...(!schedules ? Toolsets.names("schedules") : []),
   ])
   return {
@@ -75,6 +87,6 @@ export function capabilityConfiguration(extensions: Nexus.Extension[], kernel: s
         }
       : { mode: "off" },
     lifecycle_hooks: executionConfiguration(extensions).lifecycle_hooks,
-    image_model: images && typeof images.configuration.model === "string" ? images.configuration.model : null,
+    image_model: imageModel || null,
   }
 }
