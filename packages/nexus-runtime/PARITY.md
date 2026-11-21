@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`47209fd6063c5ded85c82b078889b4272c55f45d`. Paths in the first column are relative
+`42a2ecb2cb18f6ae5fd91e6971b342fb7fe51678`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,8 +13,8 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The [latest verification](#turn-pagination-candidate-controls-and-directory-listings)
-covers turn pagination, Telegram candidate controls, raw filenames and live schedule edits.
+contract tests below. The [latest verification](#preset-tool-selection-acp-capture-and-t3-setup)
+covers Preset selection through admission, ACP capture and T3 project setup.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
@@ -1299,3 +1299,74 @@ The source UI management bridge updated only the prompt of a scheduled job,
 retained its exact clock, model, name and approval mode, and received HTTP 409 for
 a stale lock version. The temporary schedules were canceled, workspaces deleted
 and agents removed.
+
+## Preset tool selection, ACP capture and T3 setup
+
+Reviewed November 21, 2026 against Cybros `42a2ecb2c`. Its `agents/rho` tree
+is identical to the previous pin (`3da8e3ef910652ade18aea35a0ff7ba5601b3692`).
+The application and executor tables above identify the reference contracts and
+their tests. This pass traced the following production entry points.
+
+| Rho package | OpenCode entry point and owner |
+| --- | --- |
+| `rho` | The managed server's experimental Nexus handlers call `runtime.ts`. Preset commands, Bot settings and conversation admission go through `presets.ts`, `bots.ts` and `application.ts`. |
+| `rho-env` | The connected executor drains announced work through `runner-inbox.ts`, placement checks and the tool implementations in `runner.ts`. |
+| `rho-codemode` | The `nexus.codemode` extension exposes `code` through the runner. `code.ts` uses OpenCode Code Mode and the claim's operation interface. |
+| `rho-mcp` | `nexus.mcp` registers OpenCode MCP transports through `mcp.ts`. Their announcements feed `preset-mcp.ts`. |
+| `rho-web-tools` | The built-in web extension registers `web_fetch` and `web.fetch`, both backed by `web.ts`. |
+| `rho-browser` | `nexus.browser` registers browser tools. `browser.ts` and `browser-session.ts` own tab state and actions. |
+| `rho-acp` | The CLI Nexus ACP adapter loads the editor entry point in `editor.ts` and uses the service's authenticated conversation operations. |
+| `rho-acp-client` | `nexus.acp-client` registers `delegate_agent` and the `acp.*` management commands in `acp.ts`. |
+| `rho-ingress-telegram` | The Telegram extension routes updates and operator commands through the ingress, transport and worker modules. |
+| `rho-t3` | `nexus.t3` registers setup commands and coding tools backed by `T3Client`, `T3Transport` and `T3Catalog`. |
+| `rho-dev` | `dev/cli.ts` talks to the managed service. The opt-in `dev/extension.ts` command dispatches to the shared operations and streams. |
+
+### Fixture verification
+
+- `runtime.test.ts` and `application.test.ts` exercise a callable name through
+  Preset replacement, profile publication and input admission. The role keeps
+  its own canonical selection. A subsequent edit affects fresh work, and a
+  replay carries the original declaration.
+- `policy.test.ts` checks distinct executor and Nexus MCP connections offering
+  the same remote tool, member-ID exclusions from earlier versions, and an
+  explicitly named Nexus import. `bots.test.ts` checks that a Bot pins its
+  Preset until the operator selects another.
+- `acp.test.ts` parses the complete JSONL from an active and retired child
+  across the former 65,536-character cutoff. Capture still enforces the
+  16 MiB limit and applies the existing redaction and PDF metadata rules.
+- `t3.test.ts` counts peer requests. Invalid paths make zero requests, a
+  truncated POST response triggers a directory read, and adopting the trimmed
+  path a second time avoids another create.
+- Runtime conformance with Chromium passed 421 tests across 76 files. The
+  Linux-only filename test was skipped on macOS. Both runtime type checks, the runtime
+  build, CLI and Server Nexus adapter tests, Protocol identifier tests, and root
+  `bun run check` passed. The OpenCode client was regenerated from the updated
+  management command. The checked-in Cybros SDK serviced the live calls.
+
+### Development Nexus verification
+
+An isolated source-built managed service and scratch Agent connected to
+`http://localhost:3000`. The production UI saved a Main Preset with
+`tools: ["memory_read"]` and an empty runner selection. Nexus reported
+`kernel_tools: ["nexus.memory.read"]` on the profile and assembled exactly
+`memory_read`. Input `01a1fe10-27cc-71af-95d1-e97db8ad90b4` had the same
+canonical declaration and callable allowlist in the durable admission journal.
+A scratch Bot using the same selection also published `nexus.memory.read`.
+Removing its selected Preset returned HTTP 400 and named the Bot.
+
+Two isolated stdio MCP peers advertised `read`, one on the Agent role and one
+on the runner role. The UI saved two separate exclusions with the announced
+executor ID. A real conversation-owned `delegate_agent` task produced 73,497
+characters across eight complete JSONL records. The active capture included
+initialization and the retired capture retained the entire prefix. An isolated
+HTTP/WebSocket T3 peer accepted one create, lost the response and returned
+the new project on directory reconciliation. The saved project and default
+coding agent survived UI reload. The live form also exposed a bridge mismatch
+that hid the runtime's path refusal. The browser regression also reproduced
+a failed project listing hiding a successful agent listing. The UI now
+retains each result independently.
+
+The scratch integrations were disabled, the workspace reached `deleted`,
+the Agent reached `removed` and both issued keys were revoked. Nexus retains
+the ACP transcript with its deleted workspace's execution records. The
+installed service was ready on its original pairing after cleanup.

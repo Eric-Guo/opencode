@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test"
 import type { AgentConfigurationInput } from "@cybros/agent"
-import { applyMcp, matchingNames, mcpCallable, type McpDirectory } from "../src/preset-mcp"
+import {
+  applyMcp,
+  presetInventory,
+  selectedMcp,
+  matchingNames,
+  mcpCallable,
+  type McpDirectory,
+} from "../src/preset-mcp"
 import { externalBot } from "../src/bot-policy"
+import { readEffect } from "../src/runner"
 import { Presets } from "../src/presets"
 import { storeFixture } from "./fixture/store"
 
@@ -118,4 +126,70 @@ test("External Bot policy retains explicit MCP and narrows send/spawn grants, me
     ["workspace", "read"],
   ])
   expect(result.prompt_template.blocks).toEqual([{ type: "memory" }])
+})
+
+test("MCP choices identify the announcing executor and honor each saved exclusion independently", async () => {
+  const read = {
+    name: "remote_read",
+    effect_profile: readEffect,
+    description: "Read",
+    input_schema: { type: "object" as const },
+    mcp: { server_key: "files", tool_name: "read" },
+  }
+  const fixture = storeFixture((request) => {
+    const url = new URL(request.url)
+    if (url.pathname.endsWith("/tools")) return Response.json({ tools: [] })
+    if (url.pathname.endsWith("/executors"))
+      return Response.json({
+        executors: [
+          {
+            public_id: "remote",
+            kind: "runner",
+            presence: "online",
+            status: "active",
+            service_roles: ["runner"],
+            services: { runner: { tools: [{ ...read, effect_profile: {} }], documents: [], environment: {} } },
+          },
+        ],
+      })
+    if (url.pathname.endsWith("/mcp_connections"))
+      return Response.json({
+        mcp_connections: [
+          {
+            public_id: "nexus",
+            name: "files",
+            enabled: true,
+            available: true,
+            account_label: null,
+            tools: [{ name: "read", description: "read", input_schema: { type: "object" } }],
+          },
+        ],
+        pagination: { next_after: null },
+      })
+  })
+  try {
+    const inventory = await presetInventory(fixture.client, { agent: "paired", runner: "announced" }, [read], {
+      runner_executor_public_ids: ["remote"],
+      mcp_tools: [{ connection_public_id: "nexus", tool_name: "read", name: "custom_read" }],
+    })
+    const [nexus, app, runner] = inventory.directory
+    expect(inventory.tools).toEqual([])
+    expect(app.ref).toEqual({ source: "executor", executor_public_id: "announced", server_key: "files" })
+    expect(app.previous_ref).toEqual({ source: "executor", server_key: "files", executor_public_id: "paired" })
+    expect(nexus.tools[0].callable_name).toBe("custom_read")
+    for (const ref of [app.previous_ref!, app.ref]) {
+      const enabled = selectedMcp(inventory.directory, {
+        disabled_connections: [runner.ref],
+        disabled_tools: [{ ...ref, tool_name: "read" }],
+      })
+      expect(enabled.map((entry) => entry.ref)).toEqual([nexus.ref])
+    }
+    expect(
+      selectedMcp(inventory.directory, { disabled_connections: [app.ref], disabled_tools: [] }).map(
+        (entry) => entry.ref,
+      ),
+    ).toEqual([nexus.ref, runner.ref])
+  } finally {
+    fixture.server.stop(true)
+  }
 })
