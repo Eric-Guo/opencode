@@ -5,7 +5,7 @@ import { NexusPreset } from "@opencode/schema/nexus-preset"
 import { StoreDocument } from "./document"
 import { readPreset, writePreset } from "./preset-document"
 import { memoryPolicy } from "./memory-policy"
-import { applyMcp, selectedMcp, withoutMcp, type McpDirectory } from "./preset-mcp"
+import { applyMcp, selectedMcp, withoutMcp, type McpDirectory, type PresetInventory } from "./preset-mcp"
 import { summaryPrompt } from "./capabilities"
 
 export const guidance =
@@ -60,8 +60,9 @@ export class Presets {
 
   constructor(
     member: Client,
-    private readonly mcp?: () => Promise<McpDirectory>,
+    private readonly inventory?: () => Promise<McpDirectory | PresetInventory>,
     private readonly summarizer = summaryPrompt,
+    private readonly botUsing?: (id: string) => Promise<string | undefined>,
   ) {
     this.document = new StoreDocument(
       member.profile.storeEntries,
@@ -111,6 +112,21 @@ export class Presets {
   }
 
   async command(command: NexusPreset.Command) {
+    if (command.action === "preset.tools") {
+      const inventory = await this.readInventory()
+      return {
+        tools: inventory.tools,
+        mcp_connections:
+          inventory.directory?.map((row) => ({
+            ref: row.ref,
+            ...(row.previous_ref && { previous_ref: row.previous_ref }),
+            name: row.name,
+            account_label: row.account_label,
+            available: row.available,
+            tools: row.tools.map((tool) => ({ name: tool.name, description: tool.description })),
+          })) ?? [],
+      } satisfies NexusPreset.ToolChoices
+    }
     const catalog = await this.catalog()
 
     if (command.action === "preset.list") return catalog
@@ -148,6 +164,10 @@ export class Presets {
     if (command.action === "preset.export")
       return { name: entry.name, description: entry.description, configuration: entry.configuration }
 
+    if (command.action === "preset.remove") {
+      const bot = await this.botUsing?.(command.id)
+      if (bot) throw new Error("Preset is in use by Bot " + bot)
+    }
     const saved = await this.document.change((current) => {
       const row = find(current!, command.id)
 
@@ -187,11 +207,28 @@ export class Presets {
     return find(saved, command.id)
   }
 
-  async resolve(base: AgentConfigurationInput, id?: string, inheritedModel?: string) {
-    const catalog = await this.catalog()
+  private async readInventory() {
+    const inventory = await this.inventory?.()
+    if (!inventory || Array.isArray(inventory)) return { directory: inventory, tools: [], kernel: undefined }
+    return inventory
+  }
+
+  async snapshot() {
+    const [catalog, inventory] = await Promise.all([this.catalog(), this.readInventory()])
+    return { catalog, ...inventory }
+  }
+
+  async resolve(
+    base: AgentConfigurationInput,
+    id?: string,
+    inheritedModel?: string,
+    snapshot?: Awaited<ReturnType<Presets["snapshot"]>>,
+  ) {
+    const current = snapshot ?? (await this.snapshot())
+    const catalog = current.catalog
     const preset = find(catalog, id ?? catalog.main_preset_public_id)
-    const directory = await this.mcp?.()
-    const resolved = compile(preset, base, inheritedModel, directory)
+    const directory = current.directory
+    const resolved = compile(preset, base, inheritedModel, directory, current.kernel)
     const parentMcp = directory
       ? selectedMcp(directory, preset.configuration.mcp).map((entry) => entry.tool.callable_name)
       : (resolved.configuration.mcp_tools ?? []).map((tool) => tool.name)
@@ -207,7 +244,7 @@ export class Presets {
       configuration: {
         ...withRoles(resolved.configuration, description),
         delegation_catalog: roles.map((entry) => {
-          const child = compile(entry, base, inheritedModel, directory)
+          const child = compile(entry, base, inheritedModel, directory, current.kernel)
           const childConfiguration = withRoles(child.configuration, description)
           const summarizer = this.summarizer(childConfiguration.compaction_policy)
           const names = directory
@@ -270,7 +307,9 @@ function withRoles(configuration: AgentConfigurationInput, description: string) 
 
   if (
     configuration.kernel_tools?.includes(spawn) &&
-    !tools.some((tool) => "canonical" in tool && tool.canonical === spawn && (tool as ToolAlias).function.name === "spawn")
+    !tools.some(
+      (tool) => "canonical" in tool && tool.canonical === spawn && (tool as ToolAlias).function.name === "spawn",
+    )
   )
     tools.push(toolAlias("spawn", spawn))
 
@@ -345,6 +384,7 @@ function compile(
   base: AgentConfigurationInput,
   inheritedModel?: string,
   directory?: McpDirectory,
+  kernel: PresetInventory["kernel"] = [],
 ) {
   const configuration = preset.configuration
   const value: AgentConfigurationInput = {
@@ -386,7 +426,9 @@ function compile(
   ] as AgentConfigurationInput["approval_rules"]
 
   if (configuration.tools) {
-    value.kernel_tools = base.kernel_tools?.filter((name) => configuration.tools!.includes(name))
+    const selected = new Set(configuration.tools)
+    const canonical = new Set(kernel.filter((tool) => selected.has(tool.name)).map((tool) => tool.canonical_name))
+    value.kernel_tools = base.kernel_tools?.filter((name) => selected.has(name) || canonical.has(name))
     value.tool_definitions = base.tool_definitions?.filter((tool) => {
       const entry = Schema.decodeUnknownSync(
         Schema.Struct({

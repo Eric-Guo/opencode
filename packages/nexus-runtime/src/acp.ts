@@ -151,7 +151,7 @@ export class AcpClient {
     if (command.action === "acp.logs") {
       const capture = selected?.child.capture ?? this.archives.get(command.session)
       if (!capture) throw new Error("Unknown delegated session.")
-      return (await capture.read()).slice(-65536)
+      return capture.read()
     }
     if (!selected) throw new Error("Unknown delegated session.")
     await this.retire(selected.child, true)

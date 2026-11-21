@@ -77,7 +77,30 @@ export const Catalog = Schema.Struct({
 })
 export interface Catalog extends Schema.Schema.Type<typeof Catalog> {}
 
+export const ToolChoices = Schema.Struct({
+  tools: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      kind: Schema.Literals(["kernel", "agent", "runner"]),
+      canonical: Schema.String.pipe(optional),
+      description: Schema.String.pipe(optional),
+    }),
+  ),
+  mcp_connections: Schema.Array(
+    Schema.Struct({
+      ref: Connection,
+      previous_ref: Connection.pipe(optional),
+      name: Schema.String,
+      account_label: Schema.NullOr(Schema.String),
+      available: Schema.Boolean,
+      tools: Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),
+    }),
+  ),
+}).annotate({ identifier: "NexusPreset.ToolChoices" })
+export interface ToolChoices extends Schema.Schema.Type<typeof ToolChoices> {}
+
 export const Command = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("preset.tools") }),
   Schema.Struct({ action: Schema.Literal("preset.list") }),
   Schema.Struct({ action: Schema.Literal("preset.create"), value: Authored }),
   Schema.Struct({ action: Schema.Literal("preset.replace"), id: Schema.String, value: Authored }),
