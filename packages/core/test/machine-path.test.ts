@@ -886,7 +886,7 @@ on.effect("keeps a relative machine-shaped path local when no machine has that n
       )
       expect(result.status).toBe("error")
       expect(result.error?.message).toBe(
-        `Working directory does not exist: ${path.join(tmp.path, "gpu:machines-test")}`,
+        `Unable to execute command: pwd: Working directory does not exist: ${path.join(tmp.path, "gpu:machines-test")}`,
       )
     }).pipe(Effect.provide(graph(tools)))
   }),
@@ -904,7 +904,7 @@ off.effect("keeps a relative machine-shaped path local with the flag off, even w
       )
       expect(result.status).toBe("error")
       expect(result.error?.message).toBe(
-        `Working directory does not exist: ${path.join(tmp.path, "gpu:machines-test")}`,
+        `Unable to execute command: pwd: Working directory does not exist: ${path.join(tmp.path, "gpu:machines-test")}`,
       )
     }).pipe(Effect.provide(graph(tools)))
   }),
@@ -921,7 +921,9 @@ on.effect("names the machine when its working directory does not exist", () =>
         call("shell", { command: "pwd", workdir: "gpu:/no/such/dir" }),
       )
       expect(result.status).toBe("error")
-      expect(result.error?.message).toBe("Working directory does not exist on gpu: /no/such/dir")
+      expect(result.error?.message).toBe(
+        "Unable to execute command: pwd: Working directory does not exist on gpu: /no/such/dir",
+      )
       expect(worker.runs).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
   }),
