@@ -8,6 +8,7 @@ import { editor, editorPrompt } from "../src/editor"
 import { editorBridge, editorRoots } from "../src/editor-bridge"
 import { EditorTranscript } from "../src/editor-follow"
 import { NexusApplication } from "../src/application"
+import { conversationFeeds } from "./fixture/conversation-feeds"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture } from "./fixture/conversation"
 
@@ -55,6 +56,8 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
   const calls: string[] = []
   const metadata: { value: JsonObject } = { value: {} }
   const question = { restored: false, loaded: false }
+  const liveText = Promise.withResolvers<void>()
+  const liveStep = Promise.withResolvers<void>()
   const elicited = Promise.withResolvers<void>()
   const answer = Promise.withResolvers<{ action: "cancel" }>()
   const questionShown = Promise.withResolvers<void>()
@@ -75,7 +78,9 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    async fetch(request) {
+    websocket: conversationFeeds,
+    async fetch(request, server) {
+      if (server.upgrade(request, { headers: { "Sec-WebSocket-Protocol": "actioncable-v1-json" } })) return
       const path = new URL(request.url).pathname
 
       calls.push(request.method + " " + path)
@@ -300,6 +305,14 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
       if (
         params.update.sessionUpdate === "agent_message_chunk" &&
         params.update.content.type === "text" &&
+        params.update.content.text === "Own"
+      )
+        liveText.resolve()
+      if (params.update.sessionUpdate === "tool_call" && params.update.toolCallId === "run:live-step")
+        liveStep.resolve()
+      if (
+        params.update.sessionUpdate === "agent_message_chunk" &&
+        params.update.content.type === "text" &&
         params.update.content.text === "Continue?"
       )
         questionShown.resolve()
@@ -402,7 +415,9 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     question.restored = true
     await peer.agent.request("session/resume", { sessionId: "conversation", cwd: directory })
     question.loaded = true
-    await elicited.promise
+    await Promise.all([elicited.promise, liveText.promise, liveStep.promise])
+    expect(JSON.stringify(updates)).not.toContain("Foreign")
+    expect(JSON.stringify(updates)).not.toContain("other:live-step")
     await expect(
       peer.agent.request("session/prompt", {
         sessionId: "conversation",
@@ -482,7 +497,7 @@ test("the editor bridge preserves unsaved contents, scopes filesystem requests a
   }
 })
 
-test("ACP transcript keeps fallback message identities separate and does not duplicate settled output", async () => {
+test.each([true, false])("ACP transcript separates fallbacks and settles once (run-backed: %s)", async (hasRun) => {
   const updates: SessionNotification[] = []
   const inbound = new TransformStream<AnyMessage>()
   const outbound = new TransformStream<AnyMessage>()
@@ -495,24 +510,24 @@ test("ACP transcript keeps fallback message identities separate and does not dup
   const transcript = new EditorTranscript("conversation", connection.client, "/work")
 
   try {
-    transcript.execution({ turn_public_id: "turn", variant_public_id: "v1", run_public_id: "r1" })
+    transcript.execution({ turn_public_id: "turn", variant_public_id: "v1", run_public_id: hasRun ? "r1" : null })
     await transcript.frame({
       type: "text_delta",
       turn_public_id: "turn",
       variant_public_id: "v1",
-      run_public_id: "r1",
+      run_public_id: hasRun ? "r1" : null,
       task_key: null,
       turn: null,
       payload: { text: "hel" },
     })
     await transcript.settle("hello")
     await transcript.settle("hello")
-    transcript.execution({ turn_public_id: "turn", variant_public_id: "v2", run_public_id: "r2" })
+    transcript.execution({ turn_public_id: "turn", variant_public_id: "v2", run_public_id: hasRun ? "r2" : null })
     await transcript.frame({
       type: "text_delta",
       turn_public_id: "turn",
       variant_public_id: "v1",
-      run_public_id: "r1",
+      run_public_id: hasRun ? "r1" : null,
       task_key: null,
       turn: null,
       payload: { text: "stale" },
