@@ -232,6 +232,12 @@ test("Bot identities retain settings and recover switches without redirecting ac
         summarizer: { content: "Use the updated adaptation." },
       },
     })
+    const current = { ...input, conversation: second.selected.public_id }
+    await reconnected.submit({ ...current, key: "pin", model: "provider/explicit" })
+    await reconnected.submit({ ...current, key: "inherit" })
+    expect(inputs.at(-1)?.model_selection).toMatchObject({ source: "explicit", model: "provider/explicit" })
+    await reconnected.submit({ ...current, key: "automatic", model: null })
+    expect(inputs.at(-1)?.model_selection).toMatchObject({ source: "default", model: "provider/model" })
     await reconnected.command({
       action: "bot.configure",
       id,

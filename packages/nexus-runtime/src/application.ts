@@ -62,7 +62,7 @@ export type ApplicationInput = {
   side?: boolean
   attachments?: readonly string[]
   until?: { command: string; attempts?: number; directory?: string }
-  model?: string
+  model?: string | null
   preset?: string
   delivery?: CreateInput["delivery_mode"]
   executor_contexts?: Record<string, JsonObject>
@@ -509,20 +509,25 @@ export class NexusApplication {
         (agent) => agent.public_id === recipient && this.hooks?.agents?.().includes(agent.name),
       )
       const previous =
-        initial && !input.model
+        initial && input.model === undefined
           ? await this.admissions.modelSelection(input.workspace, input.conversation, initial)
           : undefined
-      const model = input.model ?? previous?.model
+      const selected = input.model ?? previous?.model
+      const model =
+        selected ?? (registered && !registered.configuration.default_model ? this.base().default_model : undefined)
       return foreignInput(
         {
           ...input,
-          model:
-            model ??
-            (registered && !registered.configuration.default_model
-              ? (this.base().default_model ?? undefined)
-              : undefined),
+          model: model ?? undefined,
           ...(registered && model
-            ? { model_selection: { source: "explicit", constraint: "route", model, alternatives: [] } }
+            ? {
+                model_selection: {
+                  source: selected ? "explicit" : "default",
+                  constraint: selected ? "route" : "any",
+                  model,
+                  alternatives: [],
+                },
+              }
             : {}),
           ...(registered && conversation.default_runner
             ? {
@@ -575,7 +580,7 @@ export class NexusApplication {
             ? await this.policy(input.workspace, input.conversation, input.preset)
             : await this.prepare(input.preset, { workspace: input.workspace, conversation: input.conversation })))
     const previousSelection =
-      !side && !input.model
+      !side && input.model === undefined
         ? await this.admissions.modelSelection(input.workspace, input.conversation, initial)
         : undefined
     const model = input.model ?? previousSelection?.model ?? side?.model ?? prepared.model
