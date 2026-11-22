@@ -14,7 +14,7 @@ to MCP 1.11. The stdio hooks continue to use the existing child-process contract
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
 tests below. The [latest verification](#conversation-streams-and-browser-references)
-covers conversation streams and browser references.
+covers conversation streams, standalone runs and browser references.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
@@ -27,10 +27,18 @@ and [reference tests](#reference-contract-anchors) cover all eleven runtime pack
 | Workflow | Observed behavior | TypeScript checks |
 | --- | --- | --- |
 | One-shot prompts and ACP | A direct reply streams on the conversation channel under its turn and variant. A loop-backed reply uses the same channel and carries a run ID. Other executions cannot contribute text or tool progress. Settling a reply emits its remaining text once. | `test/run.test.ts`, `test/editor.test.ts` |
+| Development watch and follow | Standalone runs subscribe to run feeds. Conversation observers subscribe to conversation feeds, follow the streaming variant during regeneration and reconcile the final answer over HTTP. | `test/dev.test.ts`, `test/dev-worker.test.ts` |
 | Isolated Chromium | An element reference from a sibling or a replaced tab cannot select, click or type into the current page. Fresh snapshot references work on the replacement. | `test/browser.test.ts` |
 
-**Live Nexus.** The source one-shot prompt received direct-reply deltas through the Human connection at
-`localhost:3000` and returned one final answer. The ACP regression used an isolated test peer.
+**Live Nexus.** A source one-shot prompt and development observer received live
+deltas for a direct reply with no run ID through the Human connection at
+`localhost:3000`. The prompt returned one final answer, which `watch` also
+recovered after completion. A second conversation with an authored trailing
+step emitted run-correlated transcript frames. A standalone run published task
+events and completed after its structured question was resolved. Each scratch
+workspace returned HTTP 404 after deletion. The browser and ACP checks used
+isolated test peers. The [UI ledger](../nexus-ui/docs/rho-webui-parity.md#new-chat-runner-selection)
+records the runner-selection checks.
 
 ## MCP catalog previews and development streams
 
