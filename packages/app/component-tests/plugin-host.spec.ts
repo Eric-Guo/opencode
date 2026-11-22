@@ -786,7 +786,12 @@ story(
 )
 
 // Selection follows opt-in tier order, not the strip's pinned-first order. Unrelated regular tabs never opt in.
-const tiers: readonly { name: string; tabs: readonly BuiltinPanelTab[]; active?: string; expected: string }[] = [
+const tiers: readonly {
+  name: string
+  tabs: readonly Pick<BuiltinPanelTab, "id" | "title" | "pinned" | "fallback" | "first">[]
+  active?: string
+  expected: string
+}[] = [
   {
     name: "regular tabs, in stored order",
     tabs: [
