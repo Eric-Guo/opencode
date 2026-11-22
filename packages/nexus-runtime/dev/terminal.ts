@@ -1197,6 +1197,22 @@ async function followDevelopment(
         const frame = object(event.frame)
         const payload = frame.payload ?? {}
         if (typeof payload !== "object" || Array.isArray(payload)) continue
+        if (event.channel === "events" && frame.type === "input_accepted") {
+          if (target.conversation && parsed.args[0] !== target.conversation && !payload.run_public_id) continue
+          if (typeof payload.deliver_at === "string" && typeof payload.input_public_id === "string") {
+            const key = "scheduled:" + payload.input_public_id
+            if (seen.get(key) === payload.deliver_at) continue
+
+            seen.set(key, payload.deliver_at)
+            breakLine()
+            terminal.write(
+              parsed.values.json
+                ? JSON.stringify(frame) + "\n"
+                : `scheduled: ${payload.input_public_id} for ${payload.deliver_at}\n`,
+            )
+            continue
+          }
+        }
         // The snapshot already includes transcript deltas and resets through this poll's cursor.
         if (
           lost &&
