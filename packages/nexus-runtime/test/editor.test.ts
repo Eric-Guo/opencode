@@ -466,7 +466,7 @@ test("the editor bridge preserves unsaved contents, scopes filesystem requests a
     await writeFile(join(outside, "private"), "private")
     if (process.platform !== "win32") await symlink(outside, join(directory, "escape"))
 
-    const descriptor = bridge.attach("conversation", await editorRoots(directory), connection.client, {
+    const descriptor = bridge.attach("conversation", editorRoots(directory), connection.client, {
       fs: { readTextFile: true, writeTextFile: true },
     })
     const request = (action: string, path: string, content?: string, token: string = descriptor.token) =>
