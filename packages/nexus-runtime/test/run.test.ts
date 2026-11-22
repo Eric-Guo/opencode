@@ -1,3 +1,5 @@
+import { RealtimeClient } from "@cybros/agent/realtime"
+import { conversationFeeds } from "./fixture/conversation-feeds"
 import { expect, test } from "bun:test"
 import { runPrompt } from "../src/run"
 import { NexusApplication } from "../src/application"
@@ -18,18 +20,22 @@ for (const scenario of [
   "running-ask",
   "refused-denial",
   "fallback-report",
+  "streaming",
+  "direct-streaming",
 ])
   test("one-shot run correlates its input and returns " + scenario, async () => {
+    const streaming = scenario.endsWith("streaming")
+    const runID = scenario === "direct-streaming" ? null : "run"
     const status =
       scenario === "refused-denial"
         ? "approval"
-        : ["addressed", "fallback-report"].includes(scenario)
+        : streaming || ["addressed", "fallback-report"].includes(scenario)
           ? "completed"
           : scenario.startsWith("running-")
             ? scenario.slice(8)
             : scenario
     const conversation = conversationFixture(scenario === "addressed" ? { answering_user_public_id: "peer" } : {})
-    const control = { canceled: 0, denied: 0 }
+    const control = { canceled: 0, denied: 0, streamed: false }
     const reports: string[] = []
     const task = {
       key: "decision",
@@ -133,7 +139,7 @@ for (const scenario of [
                 input_public_id: "input",
                 turn_public_id: "own",
                 variant_public_id: "first",
-                run_public_id: "run",
+                run_public_id: runID,
               },
             })
       if (path.endsWith("/variants"))
@@ -150,15 +156,18 @@ for (const scenario of [
             {
               public_id: "first",
               source: "original",
-              status: control.denied
-                ? "completed"
-                : status === "hold"
-                  ? "failed"
-                  : ["ask", "approval"].includes(status)
-                    ? "running"
-                    : status,
-              content: "Own answer",
-              run_public_id: "run",
+              status:
+                streaming && !control.streamed
+                  ? "running"
+                  : control.denied
+                    ? "completed"
+                    : status === "hold"
+                      ? "failed"
+                      : ["ask", "approval"].includes(status)
+                        ? "running"
+                        : status,
+              content: streaming && !control.streamed ? null : "Own answer",
+              run_public_id: runID,
             },
           ],
         })
@@ -197,12 +206,28 @@ for (const scenario of [
         return new Response(null, { status: 202 })
       }
     })
+    using live = streaming
+      ? Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          websocket: conversationFeeds,
+          fetch(request, server) {
+            if (!server.upgrade(request, { headers: { "Sec-WebSocket-Protocol": "actioncable-v1-json" } }))
+              return new Response(null, { status: 400 })
+          },
+        })
+      : undefined
     const app = new NexusApplication(
       fixture.client,
       { agent: "main", runner: "runner", workspace: "workspace" },
       () => ({}),
       undefined,
       async () => ({ agent_configuration: {}, model: "lane/model", fallback_models: [], tools: [] }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      live ? () => new RealtimeClient({ baseURL: live.url.origin, credential: "fixture" }) : undefined,
     )
     try {
       const events = await Array.fromAsync(
@@ -212,11 +237,22 @@ for (const scenario of [
             key: "key",
             prompt: "Do work",
             ...(scenario === "addressed" ? { agent: "peer" } : {}),
-            ...(status === "pending" ? { timeout_ms: 30 } : {}),
+            ...(status === "pending" ? { timeout_ms: 30 } : streaming ? { timeout_ms: 3000 } : {}),
           },
           new AbortController().signal,
         ),
+        (event) => {
+          if (event.type === "transcript") {
+            expect(event.frame).toMatchObject({ type: "text_delta", run_public_id: runID, payload: { text: "Own" } })
+            control.streamed = true
+          }
+          return event
+        },
       )
+      if (streaming) {
+        expect(events.filter((event) => event.type === "transcript")).toHaveLength(1)
+        expect(events.filter((event) => event.type === "result")).toHaveLength(1)
+      }
       const result = events.at(-1)!
       expect(result).toMatchObject({
         type: "result",
@@ -282,10 +318,13 @@ test("one-shot output reconciles live deltas with durable snapshots and keeps JS
     },
     error: () => {},
   })
+  output.accept({ type: "snapshot", execution: { variant_public_id: "old" } })
+  output.accept({ type: "transcript", frame: { type: "text_delta", payload: { text: "Hello" } } })
+  output.accept({ type: "snapshot", execution: { variant_public_id: "replacement" } })
   output.accept({ type: "transcript", frame: { type: "text_delta", payload: { text: "Hello" } } })
   output.accept({ type: "snapshot", content: "Hello world" })
   expect(output.accept({ type: "result", result: "Hello world", exit_status: 0 })).toBe(0)
-  expect(chunks.join("")).toBe("Hello world\n")
+  expect(chunks.join("")).toBe("Hello\n(restarted)\nHello world\n")
   const json: string[] = []
   const structured = new RunOutput({
     format: "json",

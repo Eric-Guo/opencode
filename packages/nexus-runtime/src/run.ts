@@ -1,4 +1,4 @@
-import { executionSnapshot } from "./execution"
+import { executionSnapshot, ownsTranscript } from "./execution"
 import { APIError, TransportError, type ExecutionIdentity, type JsonObject } from "@cybros/agent"
 import { NexusRun } from "@opencode/schema/nexus-run"
 import { Schema } from "effect"
@@ -32,9 +32,9 @@ export async function* runPrompt(
   const started = performance.now()
   const timeout = input.timeout_ms ? AbortSignal.timeout(input.timeout_ms) : undefined
   const active = AbortSignal.any([signal, ...(timeout ? [timeout] : [])])
-  const streams: Array<{ close(): Promise<void> }> = []
+  let closeStream: (() => Promise<void>) | undefined
   const frames: NexusRun.Event[] = []
-  const live = { run: "", bytes: 0 }
+  const live: { execution?: ExecutionIdentity; bytes: number } = { bytes: 0 }
   const modelSwitches: JsonObject[] = []
   const refusals: JsonObject[] = []
   const state = {
@@ -93,23 +93,28 @@ export async function* runPrompt(
         state.run = snapshot.execution.run_public_id
         state.status = snapshot.status ?? "pending"
         state.content = snapshot.content
-        if (state.run && live.run !== state.run && application.realtimeAvailable) {
-          await Promise.allSettled(streams.map((stream) => stream.close()))
-          streams.length = 0
+        if (
+          live.execution?.variant_public_id !== snapshot.execution.variant_public_id ||
+          live.execution?.run_public_id !== state.run
+        ) {
           frames.length = 0
           live.bytes = 0
-          live.run = state.run
+        }
+        live.execution = snapshot.execution
+        if (!closeStream && application.realtimeAvailable) {
           const socket = application.realtime()
           const stop = new AbortController()
           const observing = AbortSignal.any([active, stop.signal])
           const watch = async () => {
-            const subscription = await socket.runTranscript(workspace, live.run, {
+            const subscription = await socket.conversationTranscript(workspace, state.conversation, {
               signal: observing,
             })
             for await (const frame of subscription) {
+              if (!live.execution || !ownsTranscript(live.execution, frame)) continue
+
               const event = Schema.decodeUnknownSync(NexusRun.Event)({
                 type: "transcript",
-                run_id: live.run,
+                run_id: live.execution.run_public_id,
                 frame: JSON.parse(JSON.stringify(frame)),
               })
               const bytes = Buffer.byteLength(JSON.stringify(event))
@@ -124,13 +129,11 @@ export async function* runPrompt(
               if (!observing.aborted) await setTimeout(1000, undefined, { signal: observing }).catch(() => {})
             }
           })()
-          streams.push({
-            close: async () => {
-              stop.abort()
-              await socket.close()
-              await watching
-            },
-          })
+          closeStream = async () => {
+            stop.abort()
+            await socket.close()
+            await watching
+          }
         }
         while (frames.length) {
           const event = frames.shift()!
@@ -195,7 +198,7 @@ export async function* runPrompt(
         : "Run failed."
     state.exit = active.aborted ? (timeout?.aborted ? 2 : 130) : 1
   } finally {
-    await Promise.allSettled(streams.map((stream) => stream.close()))
+    await closeStream?.().catch(() => {})
     if (state.conversation && (state.exit === 2 || active.aborted))
       await application.client
         .workspace(state.workspace)
@@ -305,6 +308,7 @@ async function readModelEvents(
 /** Both live frames and durable snapshots feed one output cursor. */
 export class RunOutput {
   private text = ""
+  private variant?: string
 
   constructor(
     private readonly options: {
@@ -320,6 +324,18 @@ export class RunOutput {
       this.options.write(JSON.stringify(event) + "\n")
     if (this.options.format === "text" && !this.options.print) {
       if (event.type === "accepted") this.options.write("conversation: " + event.conversation_id + "\n")
+      if (event.type === "snapshot") {
+        const identity = Schema.decodeUnknownOption(Schema.Struct({ variant_public_id: Schema.String }))(
+          event.execution,
+        )
+        if (identity._tag === "Some") {
+          if (this.variant && this.variant !== identity.value.variant_public_id && this.text) {
+            this.text = ""
+            this.options.write("\n(restarted)\n")
+          }
+          this.variant = identity.value.variant_public_id
+        }
+      }
       if (event.type === "transcript") {
         const frame = Schema.decodeUnknownSync(
           Schema.Struct({ type: Schema.String, payload: Schema.Record(Schema.String, Schema.Json) }),
