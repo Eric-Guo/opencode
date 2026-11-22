@@ -13,10 +13,39 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The [latest verification](#conversation-streams-and-browser-references)
-covers conversation streams, standalone runs and browser references.
+tests below. The [latest verification](#runner-placement-and-model-selection)
+covers runner placement, model selection and Human input replay.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Runner placement and model selection
+
+This review used OpenCode `71cb4b89d5e` and Cybros `48ff47738`.
+The [package mapping](#application-and-executor) identifies the TypeScript
+owners for all eleven executable non-WebUI packages.
+
+| Workflow | Behavior | TypeScript checks |
+| --- | --- | --- |
+| Development CLI and one-shot prompts | Opening with a directory validates it for the selected runner before creating the conversation. Local paths resolve on disk. A remote runner accepts absolute paths that exist only on its host. The stored root, additional directories and conversation anchor travel with the accepted input and its Until check. Project instructions come from the local runner only when it owns a filesystem context. | `test/dev.test.ts`, `test/environments.test.ts`, `test/conventions.test.ts`, `test/run.test.ts` |
+| ACP editor | New sessions pass the editor's root set to the same open operation. Load and resume bind the requested root set to the conversation's current runner. Editor filesystem capabilities and editor MCP attachments require local placement. Relative paths and root sets over 4 KiB are rejected at the ACP boundary. | `test/editor-policy.test.ts`, `test/editor.test.ts` |
+| Input model | For the runtime's Agent and Bots, an omitted model inherits the last accepted explicit choice. A string pins a route, including the current default. An explicit null clears the pin. Preparing a request reserves its selection for retries, and it affects subsequent inputs upon acceptance. | `test/application.test.ts`, `test/bots.test.ts`, `test/dev.test.ts` |
+
+The development CLI opened a scratch conversation on the live Nexus server at
+`localhost:3000`. The source UI bridge prepared, submitted and replayed three
+Human inputs to conversation `01a20220-0820-7a24-a37d-69df229a08bd`. Each
+replay returned its original input ID. The first input pinned a model, the
+second cleared it and the third inherited the Preset default. All three
+captured the root, additional directory and anchor. A separate standalone run
+`01a20220-28d7-73cc-8015-e9e4ef209a2b` completed after its held task was
+answered. The scratch Agent and workspace were removed and credentials revoked.
+Remote runner paths were exercised with an isolated ACP peer and runtime fixtures.
+
+Runtime conformance passed 436 tests. The Linux-only filename test was skipped
+on macOS. Both runtime type checks, the production build, the CLI and Server
+adapter tests, the Protocol identifier test and root `bun run check` passed.
+The reference suites passed 265 Ruby tests across all eleven runtime packages,
+including 19 ACP environment tests. The [UI verification](../nexus-ui/docs/rho-webui-parity.md#composer-drafts-and-model-selection)
+covers the browser controls and signed retries.
 
 ## Conversation streams and browser references
 
