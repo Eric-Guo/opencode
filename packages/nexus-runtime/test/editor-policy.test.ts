@@ -3,7 +3,7 @@ import { editorFixture } from "./fixture/editor"
 import { conversationFixture } from "./fixture/conversation"
 
 test.each(["session/load", "session/resume"] as const)(
-  "ACP %s accepts a foreign agent without local mode or editor attachments",
+  "ACP %s binds a foreign runner’s directories without publishing local editor capabilities",
   async (method) => {
     const calls: string[] = []
     await using fixture = await editorFixture(
@@ -14,6 +14,7 @@ test.each(["session/load", "session/resume"] as const)(
           return Response.json({
             conversation: conversationFixture({
               answering_user_public_id: "peer",
+              metadata: { "opencode.acp.cwd": "/previous/project" },
               default_runner: { executor_public_id: "remote", presence: "connected" },
             }),
           })
@@ -26,7 +27,12 @@ test.each(["session/load", "session/resume"] as const)(
           calls.push("code")
         },
         setEnvironment: async () => {
-          calls.push("environment")
+          calls.push("editor port")
+        },
+        bindRoots: async (id, roots) => {
+          expect(id).toBe("conversation")
+          expect(roots).toEqual(["/remote/acp", "/remote/lib"])
+          calls.push("roots")
         },
         attachMcp: async () => {
           calls.push("mcp")
@@ -34,7 +40,12 @@ test.each(["session/load", "session/resume"] as const)(
         },
       },
     )
-    const loaded = await fixture.attach(method)
+    const loaded = await fixture.peer.agent.request(method, {
+      sessionId: "conversation",
+      cwd: "/remote/acp",
+      additionalDirectories: ["/remote/lib"],
+      mcpServers: [],
+    })
     expect(loaded.configOptions?.map((option) => option.id)).toEqual(["mode", "model"])
     await expect(
       fixture.peer.agent.request("session/set_config_option", {
@@ -43,9 +54,47 @@ test.each(["session/load", "session/resume"] as const)(
         value: "on",
       }),
     ).rejects.toMatchObject({ code: -32602 })
-    expect(calls).toEqual([])
+    expect(calls).toEqual(["roots"])
   },
 )
+
+test("ACP opens on the selected runner with the editor roots and rejects invalid paths before opening", async () => {
+  const opens: unknown[] = []
+  await using fixture = await editorFixture(
+    (request) => {
+      if (new URL(request.url).pathname.endsWith("/conversations/conversation"))
+        return Response.json({
+          conversation: conversationFixture({
+            default_runner: { executor_public_id: "remote", presence: "connected" },
+          }),
+        })
+    },
+    {
+      open: async (environment) => {
+        opens.push(environment)
+        return "conversation"
+      },
+    },
+  )
+  for (const additionalDirectories of [["relative"], ["/" + "x".repeat(4096)]]) {
+    await expect(
+      fixture.peer.agent.request("session/new", {
+        cwd: "/remote/acp",
+        additionalDirectories,
+        mcpServers: [],
+      }),
+    ).rejects.toMatchObject({ code: -32602 })
+  }
+  expect(opens).toEqual([])
+  expect(
+    await fixture.peer.agent.request("session/new", {
+      cwd: "/remote/acp",
+      additionalDirectories: ["/remote/lib"],
+      mcpServers: [],
+    }),
+  ).toMatchObject({ sessionId: "conversation" })
+  expect(opens).toEqual([{ root: "/remote/acp", directories: ["/remote/lib"] }])
+})
 
 test("ACP omits Code Mode when its extension is unavailable and preserves local editor attachment", async () => {
   const calls: string[] = []
