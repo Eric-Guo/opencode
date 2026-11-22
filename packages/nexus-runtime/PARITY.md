@@ -33,8 +33,28 @@ use the same Nexus application and realtime client as the managed service.
   connections. `test/mcp-session.test.ts` checks these cases against an HTTP peer.
 - **Development CLI.** `watch` and `follow` mark discarded visible output
   once, including when a slow reader misses the reset and the new answer
-  shares the discarded prefix. Reasoning is opt-in. The shared WebSocket follower and CLI are exercised in
-  `test/dev.test.ts`.
+  shares the discarded prefix. Reasoning is opt-in. A completed foreground
+  turn ends observation even while its run continues, and a timed-out turn
+  returns a failure exit status. `watch` identifies the remaining background
+  tasks or how to continue a held run. `test/dev.test.ts` exercises both
+  commands and the shared WebSocket follower.
+
+**Live Nexus.** The source CLI and follower observed a standalone run through
+the configured Human connection to `localhost:3000`. A private workspace's
+structured question was resolved through the SDK. Both commands reported
+the completed task and exited zero. The scratch workspaces returned HTTP 404
+after cleanup. Retry resets, timeouts and concurrent background work were
+checked with controlled frames.
+
+**Checks.** The runtime conformance suite passed 429 tests on macOS with one
+Linux-only filename test skipped. Both runtime type checks, the runtime
+build, the CLI and Server Nexus adapter tests, the Protocol identifier test
+and root `bun run check` passed. Selected Ruby tests exercised all eleven
+packages, including MCP curation and commands, development streaming and
+watch, ACP replay and delegation, executor tools, Code Mode, browser sessions,
+web rendering, Telegram input batching, T3 work and the application core.
+The [UI verification](../nexus-ui/docs/rho-webui-parity.md#model-context-recovery-and-child-navigation)
+covers task recovery and child navigation.
 
 ## Delegation, browser snapshots and conversation controls
 
