@@ -19,6 +19,7 @@ type Follower = {
   conversation: string | null
   events: { sequence: number; value: JsonObject; bytes: number }[]
   sequence: number
+  lastReset: number
   bytes: number
   touched: number
   attached: boolean
@@ -75,12 +76,14 @@ export class DevelopmentStreams {
     row.touched = performance.now()
     const events = row.events.filter((event) => event.sequence > reader.after)
     const lost = row.sequence - reader.after - events.length
+    const reset = row.lastReset > reader.after
     reader.after = row.sequence
     return {
       events: events.map((event) => event.value),
       lost,
       ...(lost
         ? {
+            reset,
             text: row.text.text,
             text_length: row.text.length,
             reasoning: row.reasoning.text,
@@ -118,6 +121,7 @@ export class DevelopmentStreams {
           : null,
       events: [],
       sequence: 0,
+      lastReset: 0,
       bytes: 0,
       touched: performance.now(),
       attached: false,
@@ -149,6 +153,7 @@ export class DevelopmentStreams {
         const frame = object(value.frame)
         const payload = object(frame.payload ?? {})
         if (frame.type === "stream_reset") {
+          row.lastReset = row.sequence + 1
           row.text.reset()
           row.reasoning.reset()
         }
