@@ -18,6 +18,15 @@ covers child exits, snapshot limits, Git review and conversation controls.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
+## MCP catalog previews
+
+- **MCP.** An otherwise valid server with no `tools` field stays down.
+  An explicit `mcp.probe` opens a temporary native OpenCode MCP connection
+  and reports eligible tools, declaration sizes and reasons for skips.
+  After the probe, the connection is closed and the published catalog and
+  settings are unchanged. Explicit empty or malformed allowlists open zero
+  connections. `test/mcp-session.test.ts` checks these cases against an HTTP peer.
+
 ## Delegation, browser snapshots and conversation controls
 
 The `agents/rho` and `sdks/typescript` trees at `c0ebf861e` match the previous

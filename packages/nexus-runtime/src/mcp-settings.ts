@@ -81,6 +81,7 @@ export function mcpSettings(
   literal = false,
 ) {
   const rows: McpRow[] = []
+  const probes = new Map<string, McpRow>()
   const faults: { key: string; issue: string }[] = []
 
   if (Array.isArray(input)) {
@@ -97,7 +98,7 @@ export function mcpSettings(
         secrets: [],
       })
 
-    return { rows, faults }
+    return { rows, faults, probes }
   }
 
   const overrides = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))(
@@ -112,7 +113,7 @@ export function mcpSettings(
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || key.length > 32)
       throw new Error("MCP server names must use lowercase letters, digits and single hyphens, up to 32 characters.")
 
-    const parsed = Schema.decodeUnknownOption(Row, { onExcessProperty: "error" })(value)
+    const parsed = Schema.decodeUnknownOption(Row, { onExcessProperty: "error" })({ tools: ["*"], ...value })
 
     if (parsed._tag === "None") {
       faults.push({
@@ -192,7 +193,7 @@ export function mcpSettings(
                 : false,
           }
 
-    rows.push({
+    const candidate: McpRow = {
       key,
       // Scoped transforms can coexist during a staged settings replacement. Identical rows reuse the connection.
       server: "nexus-" + key + "-" + createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 12),
@@ -213,10 +214,18 @@ export function mcpSettings(
       timeout,
       profiles: row.effect_profiles ?? {},
       secrets: integrationSecrets([...env.secrets, ...headerValues.secrets]),
-    })
+    }
+
+    if (value.tools === undefined) {
+      faults.push({ key, issue: "Choose a tools allowlist. Probe this server to preview its catalog." })
+      probes.set(key, candidate)
+      continue
+    }
+
+    rows.push(candidate)
   }
 
-  return { rows, faults }
+  return { rows, faults, probes }
 }
 
 export function mcpName(server: string, raw: string, document = false) {
