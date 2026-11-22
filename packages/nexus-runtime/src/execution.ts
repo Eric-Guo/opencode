@@ -1,4 +1,18 @@
-import type { ExecutionSnapshot, Run } from "@cybros/agent"
+import type { ExecutionSnapshot, Run, TranscriptItem } from "@cybros/agent"
+
+/** Direct replies have only a turn and variant. Loop-backed frames also identify their run. */
+export type TranscriptIdentity = Pick<TranscriptItem, "turn_public_id" | "variant_public_id" | "run_public_id">
+
+export function ownsTranscript(identity: TranscriptIdentity, frame: TranscriptItem) {
+  if (frame.run_public_id) return frame.run_public_id === identity.run_public_id
+  return (
+    !identity.run_public_id &&
+    !!frame.turn_public_id &&
+    !!frame.variant_public_id &&
+    frame.variant_public_id === identity.variant_public_id &&
+    frame.turn_public_id === identity.turn_public_id
+  )
+}
 
 /** Active Runs can need a decision while their execution state remains running. */
 export function executionSnapshot(snapshot: ExecutionSnapshot | null) {
