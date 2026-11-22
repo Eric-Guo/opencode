@@ -55,8 +55,17 @@ test("the real development extension preserves SDK methods, live iterators, iden
         socket.send(JSON.stringify({ type: "confirm_subscription", identifier: command.identifier }))
         const identity = object(JSON.parse(command.identifier))
         expect(identity.workspace_id).toBe("workspace")
-        expect(identity.run_id).toBe("run")
+        expect(identity).toMatchObject({
+          channel: "AgentAPI::V1::ConversationEventsChannel",
+          conversation_id: "conversation",
+        })
         if (identity.items !== "transcript") return
+        socket.send(
+          JSON.stringify({
+            identifier: command.identifier,
+            message: { event: { type: "text_delta", run_public_id: "other", text: "Foreign" } },
+          }),
+        )
         socket.send(
           JSON.stringify({
             identifier: command.identifier,
@@ -116,6 +125,7 @@ test("the real development extension preserves SDK methods, live iterators, iden
         await new Promise<void>((resolve) => setImmediate(resolve))
     }
     expect(JSON.stringify(frames)).toContain("Worker transcript")
+    expect(JSON.stringify(frames)).not.toContain("Foreign")
     await manager.command("dev", { action: "stream.attach", run: "run" })
     const joined = object(await manager.command("dev", { action: "stream.open", run: "run" }))
     expect(joined.text).toBe("Worker transcript")
