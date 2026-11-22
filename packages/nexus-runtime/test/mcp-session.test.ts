@@ -555,6 +555,9 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
                     tools: ["*"],
                     headers: { Authorization: "fixture-private-secret" },
                   },
+                  manual: { transport: "http", url: server.url.href },
+                  empty: { transport: "http", url: server.url.href, tools: [] },
+                  invalid: { transport: "http", url: server.url.href, tools: "read" },
                   parked: {
                     transport: "http",
                     url: server.url.href,
@@ -594,6 +597,9 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
         })
         const tool = manager.tools().find((tool) => tool.definition.name === "mcp__active__probe")!
         expect(await manager.command("mcp.list", {})).toMatchObject([
+          { server: "manual", status: "down" },
+          { server: "empty", status: "down" },
+          { server: "invalid", status: "down" },
           {
             server: "active",
             skipped: [{ name: "broken", reason: "Invalid object JSON Schema" }],
@@ -652,6 +658,23 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
         await expect(tool.execute({ mode: "transport" }, context)).rejects.toThrow()
         expect(manager.tools().some((tool) => tool.definition.name === "mcp__parked__probe")).toBe(false)
         const before = calls.filter((method) => method === "initialize").length
+        for (const name of ["empty", "invalid"])
+          expect(await manager.command("mcp.probe", { server: name })).toMatchObject({ status: "down" })
+        expect(calls.filter((method) => method === "initialize")).toHaveLength(before)
+
+        const inventory = await manager.command("mcp.list", {})
+        const servers = (await Effect.runPromise(mcp.servers())).map((row) => row.name)
+        const declarations = manager.tools().map((tool) => tool.definition.name)
+        expect(await manager.command("mcp.probe", { server: "manual" })).toMatchObject({
+          status: "connected",
+          skipped: [{ name: "broken", reason: "Invalid object JSON Schema" }],
+          bytes: 113,
+          tools: [{ name: "mcp__manual__probe", bytes: 113 }],
+        })
+        expect(calls.filter((method) => method === "initialize")).toHaveLength(before + 1)
+        expect(await manager.command("mcp.list", {})).toEqual(inventory)
+        expect((await Effect.runPromise(mcp.servers())).map((row) => row.name)).toEqual(servers)
+        expect(manager.tools().map((tool) => tool.definition.name)).toEqual(declarations)
         expect(await manager.command("mcp.probe", { server: "parked" })).toMatchObject({
           status: "connected",
           skipped: [{ name: "broken", reason: "Invalid object JSON Schema" }],
