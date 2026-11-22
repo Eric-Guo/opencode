@@ -2,7 +2,7 @@
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
   # Keep this version aligned with the @playwright/test catalog entry in package.json.
-  PLAYWRIGHT_VERSION: "1.60.0"
+  PLAYWRIGHT_VERSION: "1.65.1"
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
   BUN_INSTALL_CACHE_DIR: "$CI_PROJECT_DIR/.cache/bun"
   HUSKY: "0"
