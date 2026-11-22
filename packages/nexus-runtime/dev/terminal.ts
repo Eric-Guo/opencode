@@ -1092,27 +1092,57 @@ async function followDevelopment(
     terminal.command(clean({ action, addressed: true, ...fields }))
   const deadline = parsed.number("timeout")
   const state: { stream?: string; run?: string } = {}
+  let printed = false
+  let midLine: "text" | "reasoning" | undefined
+  const breakLine = () => {
+    if (midLine) terminal.write("\n")
+    midLine = undefined
+  }
+  const markRestart = () => {
+    if (!printed) return
+
+    breakLine()
+    terminal.write("(restarted — the text above was discarded)\n")
+    printed = false
+  }
+  const reset = () => {
+    markRestart()
+    text.reset()
+    reasoning.reset()
+  }
   const wait = (interval: number) => {
     const remaining = deadline === undefined ? Infinity : deadline * 1000 - (performance.now() - started)
     if (remaining <= 0) throw new Error("Timed out watching " + (target.run ?? target.conversation))
 
     return setTimeout(Math.min(interval, remaining), undefined, { signal: terminal.signal })
   }
-  const partial = (value: string, channel: "text" | "reasoning", delta = false, length?: number) => {
+  const partial = (value: string, channel: "text" | "reasoning", delta = false, length?: number, inferReset = true) => {
+    if (channel === "text" ? parsed.values.stream === false : !parsed.values.reasoning) return
+
     const accumulator = channel === "text" ? text : reasoning
     const output = delta
       ? accumulator.accumulate(value)
       : length === undefined
         ? accumulator.replaceOnSettle(value)
         : accumulator.replaceSnapshot(value, length)
-    if ((channel === "text" ? parsed.values.stream !== false : parsed.values.reasoning) && output)
-      terminal.write((!delta && accumulator.replaced ? "\n" : "") + output)
+    if (!delta && inferReset && accumulator.replaced) {
+      const other = channel === "text" ? reasoning : text
+      markRestart()
+      other.reset()
+    }
+    if (!output) return
+
+    if (midLine && midLine !== channel) breakLine()
+    terminal.write(output)
+    printed = true
+    midLine = output.endsWith("\n") ? undefined : channel
   }
   const snapshot = (row: JsonObject) => {
-    for (const channel of ["text", "reasoning"] as const) {
+    for (const channel of ["reasoning", "text"] as const) {
       const value = row[channel]
       const length = row[channel + "_length"]
-      if (typeof value === "string") partial(value, channel, false, typeof length === "number" ? length : undefined)
+      if (typeof value === "string")
+        partial(value, channel, false, typeof length === "number" ? length : undefined, row.reset === undefined)
     }
   }
   try {
@@ -1133,6 +1163,8 @@ async function followDevelopment(
         )
         state.stream = Schema.decodeUnknownSync(Schema.String)(opened.stream)
         state.run = target.run
+        breakLine()
+        printed = false
         text.reset()
         reasoning.reset()
         snapshot(opened)
@@ -1142,6 +1174,7 @@ async function followDevelopment(
       const lost = Number(events.lost ?? 0) > 0
       if (lost) {
         terminal.error(`Live stream skipped ${events.lost} buffered events. Restoring transcript snapshot.\n`)
+        if (events.reset) reset()
         snapshot(events)
       }
       for (const event of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(events.events)) {
@@ -1160,8 +1193,7 @@ async function followDevelopment(
         )
           continue
         if (event.channel === "transcript" && frame.type === "stream_reset") {
-          text.reset()
-          reasoning.reset()
+          reset()
           continue
         }
         if (event.channel === "transcript" && typeof payload.text === "string") {
@@ -1169,8 +1201,10 @@ async function followDevelopment(
           if (frame.type === "reasoning_delta") partial(payload.text, "reasoning", true)
           continue
         }
-        if (parsed.verb === "follow" || event.channel === "progress")
+        if (parsed.verb === "follow" || event.channel === "progress") {
+          breakLine()
           terminal.write(parsed.values.json ? JSON.stringify(frame) + "\n" : formatDevelopment(frame))
+        }
       }
       const info = object(await call("run", { run: target.run }))
       for (const task of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(info.tasks ?? [])) {
@@ -1178,6 +1212,7 @@ async function followDevelopment(
         const key = String(task.key)
         if (seen.get(key) === signature) continue
         seen.set(key, signature)
+        breakLine()
         terminal.write(
           parsed.values.json
             ? JSON.stringify(task) + "\n"
@@ -1205,7 +1240,7 @@ async function followDevelopment(
             continue
           }
         }
-        if (!text.empty) terminal.write("\n")
+        breakLine()
         terminal.write("status: " + String(info.status) + "\n")
         return info.status === "completed" || object(info.turn ?? {}).status === "completed" ? 0 : 1
       }

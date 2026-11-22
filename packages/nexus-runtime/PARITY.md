@@ -12,13 +12,18 @@ and model adaptation updates.
 Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
-The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The [latest verification](#delegation-browser-snapshots-and-conversation-controls)
-covers child exits, snapshot limits, Git review and conversation controls.
+The eleven executable non-WebUI packages have TypeScript owners and contract
+tests below. The [latest verification](#mcp-catalog-previews-and-development-streams)
+covers MCP catalog previews and development CLI output.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
-## MCP catalog previews
+## MCP catalog previews and development streams
+
+The review used OpenCode `113f542b546` and Cybros `c0ebf861e`. The
+[package mapping](#application-and-executor) identifies the TypeScript entry
+points for all eleven runtime packages. The source-only `rho-dev` commands
+use the same Nexus application and realtime client as the managed service.
 
 - **MCP.** An otherwise valid server with no `tools` field stays down.
   An explicit `mcp.probe` opens a temporary native OpenCode MCP connection
@@ -26,6 +31,10 @@ The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
   After the probe, the connection is closed and the published catalog and
   settings are unchanged. Explicit empty or malformed allowlists open zero
   connections. `test/mcp-session.test.ts` checks these cases against an HTTP peer.
+- **Development CLI.** `watch` and `follow` mark discarded visible output
+  once, including when a slow reader misses the reset and the new answer
+  shares the discarded prefix. Reasoning is opt-in. The shared WebSocket follower and CLI are exercised in
+  `test/dev.test.ts`.
 
 ## Delegation, browser snapshots and conversation controls
 
