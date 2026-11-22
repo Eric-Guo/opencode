@@ -301,7 +301,11 @@ export class Bots {
       throw new Error("External Bot inputs require their requester identity.")
 
     const prepared = await this.prepare(settings, command.id)
-    const model = command.model ?? prepared.configuration.default_model
+    const previous =
+      command.model === undefined
+        ? await this.admissions.modelSelection(command.workspace, command.conversation)
+        : undefined
+    const model = command.model ?? previous?.model ?? prepared.configuration.default_model
 
     if (!model) throw new Error("Select a Bot model before submitting input.")
 
@@ -315,7 +319,7 @@ export class Bots {
       answering_user_public_id: command.id,
       ...(command.speaker ? { speaker_public_id: command.speaker } : {}),
       model: { model },
-      model_selection: {
+      model_selection: previous ?? {
         source: command.model ? "explicit" : "default",
         model,
         constraint: command.model ? "route" : "any",

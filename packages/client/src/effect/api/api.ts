@@ -3772,7 +3772,7 @@ export type ExperimentalNexusManageInput = {
         readonly conversation: string
         readonly key: string
         readonly text: string
-        readonly model?: string | undefined
+        readonly model?: string | null | undefined
         readonly speaker?: string | undefined
         readonly attachments?: ReadonlyArray<string> | undefined
         readonly delivery?: "queue" | "steer" | "steer_now" | undefined
@@ -3866,7 +3866,7 @@ export type ExperimentalNexusManageInput = {
               readonly directory?: string | undefined
             }
           | undefined
-        readonly model?: string | undefined
+        readonly model?: string | null | undefined
         readonly preset?: string | undefined
         readonly approval?: "bypass" | "ask" | "rules" | undefined
         readonly target?: string | undefined
