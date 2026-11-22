@@ -40,11 +40,11 @@ export async function activateMcp(
     issue: fault.issue,
   }))
   const credentials = new Map<string, string[]>()
-  const staticSecrets = new Map(settings.rows.map((row) => [row.server, row.secrets]))
-  const refreshSecrets = async (row: McpRow) => {
+  const staticSecrets = new Map([...settings.rows, ...settings.probes.values()].map((row) => [row.server, row.secrets]))
+  const refreshSecrets = async (row: McpRow, name = row.server) => {
     if (row.transport === "stdio") return
 
-    const server = (await Effect.runPromise(mcp.servers())).find((server) => server.name === row.server)
+    const server = (await Effect.runPromise(mcp.servers())).find((server) => server.name === name)
 
     if (!server?.integrationID) return
 
@@ -339,7 +339,7 @@ export async function activateMcp(
 
     if (!report) throw new Error("Unknown MCP server: " + command.server)
 
-    const row = settings.rows.find((row) => row.key === command.server)
+    const row = settings.rows.find((row) => row.key === command.server) ?? settings.probes.get(command.server)
     if (!row?.config) return report
     const scope = await Effect.runPromise(Scope.make())
     const name = row.server + "-probe-" + crypto.randomUUID()
@@ -356,7 +356,7 @@ export async function activateMcp(
         ),
         { signal: api.signal },
       )
-      await refreshSecrets(row).catch(() => {})
+      await refreshSecrets(row, name).catch(() => {})
       const server = servers.find((server) => server.name === name)
       if (server?.status.status !== "connected")
         return {
