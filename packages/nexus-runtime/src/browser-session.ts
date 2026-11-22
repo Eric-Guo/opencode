@@ -155,7 +155,6 @@ type Tab = {
   busy: boolean
   fresh: boolean
   last: number
-  revision: number
   actionTimeout: number
   refs: Map<string, { node: number; session: string }>
   frames: Map<string, string>
@@ -362,7 +361,6 @@ export class BrowserSession {
         busy: false,
         fresh: true,
         last: this.now(),
-        revision: 0,
         actionTimeout: this.options.actionTimeout ?? 10000,
         refs: new Map(),
         frames: new Map(),
@@ -513,6 +511,9 @@ export async function loaded(tab: Tab, signal: AbortSignal, loader?: string) {
 
 export const SNAPSHOT_GUIDANCE = "Use browser_snapshot with query or ref, or raise max_chars/max_lines."
 
+// Snapshot handles must stay distinct when a loop replaces its tab or shares the driver with another loop.
+let snapshotRevision = 0
+
 export async function snapshot(
   tab: Tab,
   options: { ref?: string; query?: string; maxChars: number; maxLines: number },
@@ -541,7 +542,7 @@ export async function snapshot(
   const refs = new Map<string, { node: number; session: string }>()
   const lines: string[] = []
   const query = options.query?.toLowerCase()
-  const revision = tab.revision + 1
+  const revision = ++snapshotRevision
   let foundRoot = !selected
 
   for (const frame of frames) {
@@ -593,7 +594,6 @@ export async function snapshot(
   if (!foundRoot) throw new Error("This element is absent from the current page. Take a new browser_snapshot.")
 
   tab.refs = refs
-  tab.revision = revision
   const page = snapshotHeader(header)
   const title = "Page: " + page.url + "\nTitle: " + page.title + "\n\n"
   const body = lines.slice(0, options.maxLines).join("\n")
