@@ -386,6 +386,33 @@ for (const verb of ["watch", "follow"])
     }
   })
 
+test("follow reports conversation-scheduled inputs once, including a person's own input", async () => {
+  const output: string[] = []
+  const event = (id: string, origin: string) => ({
+    channel: "events",
+    frame: { type: "input_accepted", payload: { input_public_id: id, origin, deliver_at: "2026-11-23T00:00:00Z" } },
+  })
+  const code = await runDevelopment(["follow", "chat", "--no-stream"], {
+    signal: AbortSignal.timeout(1000),
+    command: async ({ action }): Promise<JsonValue> => {
+      if (action === "target") return { workspace: "workspace", conversation: "chat", run: "run", side: false }
+      if (action === "stream.open") return { stream: "id" }
+      if (action === "stream.poll")
+        return { events: [event("first", "person"), event("first", "person"), event("second", "agent")] }
+      if (action === "run") return { status: "completed", tasks: [] }
+      if (action === "stream.close") return null
+      throw new Error(String(action))
+    },
+    write: (value) => output.push(value.toString()),
+    error() {},
+  })
+  expect(code).toBe(0)
+  expect(output.filter((line) => line.startsWith("scheduled:"))).toEqual([
+    "scheduled: first for 2026-11-23T00:00:00Z\n",
+    "scheduled: second for 2026-11-23T00:00:00Z\n",
+  ])
+})
+
 test("development CLI preserves exact old-run results, explicit pause force, authored steps and resolution tokens", async () => {
   const writes: { path: string; body: unknown }[] = []
   const fixture = storeFixture(async (request) => {
