@@ -23,11 +23,13 @@ import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
 import type { Status } from "./runtime"
 import { authenticateEditor, type EditorAuthentication } from "./editor-auth"
-import { editorBridge, editorRoots } from "./editor-bridge"
+import type { Nexus } from "@opencode/schema/nexus"
+import { editorBridge, editorRoots, localEditorRoots } from "./editor-bridge"
 import { EditorTranscript, editorCall } from "./editor-follow"
 import { readEditorHistory } from "./editor-replay"
 
 type Mode = "bypass" | "ask" | "rules"
+type EditorPort = ReturnType<Awaited<ReturnType<typeof editorBridge>>["attach"]>
 type Session = {
   roots: string[]
   mode: Mode
@@ -36,13 +38,12 @@ type Session = {
   codeAvailable: boolean
   own: boolean
   local: boolean
-  bridge: ReturnType<Awaited<ReturnType<typeof editorBridge>>["attach"]>
   mcp: readonly string[]
   last?: { execution: InputExecution; transcript: EditorTranscript }
   question?: { decision: ExecutionDecision; execution: InputExecution; transcript: EditorTranscript }
 }
 export type EditorOptions = {
-  open?: () => Promise<string>
+  open?: (environment: Nexus.EnvironmentRoots) => Promise<string>
   defaults?: { mode?: Mode; model?: string }
   submit?: (
     input: {
@@ -64,7 +65,8 @@ export type EditorOptions = {
   ) => Promise<{ grant?: { refused?: string } }>
 
   authentication?: EditorAuthentication
-  setEnvironment?: (conversation: string, binding: Session["bridge"] | null) => Promise<void>
+  setEnvironment?: (conversation: string, binding: EditorPort | null) => Promise<void>
+  bindRoots?: (conversation: string, roots: string[]) => Promise<void>
   modePolicy?: (
     conversation: string,
   ) => Promise<{ available?: boolean; code_mode_available?: boolean; code_mode: boolean }>
@@ -478,7 +480,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
   ]
   const attach = async (
     id: string,
-    roots: string[],
+    paths: string[],
     servers: readonly McpServer[],
     peer: AgentContext,
     signal: AbortSignal,
@@ -489,14 +491,13 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     const conversation = await nexus.workspace.conversation(id).fetch({ signal })
 
     if (conversation.archived_at) throw RequestError.resourceNotFound(id)
-    if (
-      typeof conversation.metadata["opencode.acp.cwd"] === "string" &&
-      conversation.metadata["opencode.acp.cwd"] !== roots[0]
-    )
-      throw RequestError.invalidParams(undefined, "The session working directory cannot be changed.")
 
     const own = conversation.answering_user_public_id === nexus.identity?.agent
     const local = conversation.default_runner?.executor_public_id === nexus.identity?.runner
+    const roots = local ? await localEditorRoots(paths) : paths
+    await (local
+      ? options.setEnvironment?.(id, bridge.attach(id, roots, peer, state.capabilities))
+      : options.bindRoots?.(id, roots))
     const policy = own
       ? await options.modePolicy?.(id)
       : { available: false, code_mode_available: false, code_mode: false }
@@ -516,11 +517,9 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       code:
         policy?.code_mode ??
         (options.codeMode ? await options.codeMode(id) : conversation.metadata["opencode.acp.code"] !== false),
-      bridge: bridge.attach(id, roots, peer, state.capabilities),
       mcp: mcp?.tools ?? [],
     }
 
-    if (local) await options.setEnvironment?.(id, session.bridge)
     sessions.set(id, session)
     remember(
       id,
@@ -613,12 +612,13 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     })
     .onRequest("session/new", async ({ params, signal, client: peer }) => {
       await authenticate(signal)
-      const roots = await editorRoots(params.cwd, params.additionalDirectories)
+      const paths = editorRoots(params.cwd, params.additionalDirectories)
+      const roots = options.open ? paths : await localEditorRoots(paths)
 
       validateServers(params.mcpServers, !!options.attachMcp)
 
       const result = options.open
-        ? { conversation: { public_id: await options.open() } }
+        ? { conversation: { public_id: await options.open({ root: roots[0], directories: roots.slice(1) }) } }
         : await nexus.workspace.conversations.create(
             {
               answering_user_public_id: nexus.identity!.agent,
@@ -648,7 +648,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
       return attach(
         params.sessionId,
-        await editorRoots(params.cwd, params.additionalDirectories),
+        editorRoots(params.cwd, params.additionalDirectories),
         params.mcpServers,
         peer,
         signal,
@@ -661,7 +661,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
       return attach(
         params.sessionId,
-        await editorRoots(params.cwd, params.additionalDirectories),
+        editorRoots(params.cwd, params.additionalDirectories),
         params.mcpServers ?? [],
         peer,
         signal,
