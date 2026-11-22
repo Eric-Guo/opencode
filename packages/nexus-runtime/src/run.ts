@@ -50,7 +50,13 @@ export async function* runPrompt(
   }
   try {
     const opened = await application.open(
-      { key: input.key + ":open", workspace: input.workspace, runner: input.runner, agent: input.agent },
+      {
+        key: input.key + ":open",
+        workspace: input.workspace,
+        runner: input.runner,
+        agent: input.agent,
+        environment: input.directory ? { root: input.directory } : undefined,
+      },
       { signal: active },
     )
     state.conversation = opened.conversation.public_id
@@ -59,7 +65,6 @@ export async function* runPrompt(
     const chat = application.client.workspace(workspace).conversation(state.conversation)
     if (input.code_mode !== undefined)
       await application.setModes(workspace, state.conversation, { code_mode: input.code_mode })
-    if (input.directory) await application.environments.bind(workspace, state.conversation, { root: input.directory })
     const accepted = await application.submit(
       {
         key: input.key,
