@@ -3683,6 +3683,9 @@ export type ExperimentalNexusManageInput = {
         readonly model?: string | undefined
         readonly title?: string | undefined
         readonly runner?: string | null | undefined
+        readonly environment?:
+          | { readonly root: string; readonly directories?: ReadonlyArray<string> | undefined }
+          | undefined
       }
     | {
         readonly action: "application.prepare" | "application.submit"
