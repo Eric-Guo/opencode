@@ -3,6 +3,12 @@ export * as Nexus from "./nexus.js"
 import { Schema } from "effect"
 import { NonNegativeInt, PositiveInt, optional } from "./schema.js"
 
+export const EnvironmentRoots = Schema.Struct({
+  root: Schema.NonEmptyString,
+  directories: Schema.Array(Schema.NonEmptyString).pipe(optional),
+})
+export type EnvironmentRoots = typeof EnvironmentRoots.Type
+
 export const ExecutorStatus = Schema.Struct({
   running: Schema.Boolean,
   in_flight: NonNegativeInt,

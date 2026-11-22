@@ -9,17 +9,27 @@ import {
 import { realpath, stat } from "node:fs/promises"
 import { isAbsolute, relative, sep } from "node:path"
 import { isDeepStrictEqual } from "node:util"
-import { Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { resolvePath } from "./file-read"
 import { EditorBinding } from "./editor-bridge"
 import type { Checkpoints } from "./checkpoints"
 
 const Binding = Schema.Struct({
   root: Schema.NonEmptyString,
-  directories: Schema.Array(Schema.String),
-  anchor: Schema.NullOr(Schema.String),
+  directories: Schema.Array(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  anchor: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 })
 type Binding = typeof Binding.Type
+
+export function boundRootDescription(context?: JsonObject) {
+  const binding = Schema.decodeUnknownOption(Binding)(context?.["opencode.environment"] ?? context?.["rho.environment"])
+  if (Option.isNone(binding) || !binding.value.anchor) return
+  return [
+    `This conversation's root is ${binding.value.root}. Relative paths resolve against it there.`,
+    ...(binding.value.directories.length ? ["Additional directories: " + binding.value.directories.join(", ")] : []),
+  ].join("\n")
+}
+
 export const EnvironmentChange = Schema.Struct({
   root: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
   directories: Schema.optional(Schema.Array(Schema.NonEmptyString)),
@@ -113,6 +123,12 @@ export class Environments {
     }
   }
 
+  async initialize(workspace: string, conversation: string, runner: string, paths: Omit<Binding, "anchor">) {
+    const entry = await this.write(workspace, conversation, runner, { ...paths, anchor: conversation }, true)
+    const binding = Schema.decodeUnknownSync(Binding)(entry.value)
+    return { root: binding.root, directories: binding.directories, source: "conversation" as const }
+  }
+
   async copy(workspace: string, parent: string, conversation: string, runner: string) {
     const inherited = await this.resolve(workspace, parent, runner)
     return this.write(
@@ -135,8 +151,7 @@ export class Environments {
         const before = await this.resolve(workspace, conversation, selected)
         const root = value.root === undefined ? before.binding.root : value.root
         const directories = value.directories ?? before.binding.directories
-        const paths =
-          root === null ? undefined : await this.validate(root, directories, selected === this.identity.runner)
+        const paths = root === null ? undefined : await this.validate(root, directories, selected)
         const port = value.fs
           ? Schema.decodeUnknownSync(EditorBinding)({
               ...value.fs,
@@ -249,15 +264,8 @@ export class Environments {
     if (depth > 8) throw new Error("executor_environment_unavailable: the parent chain is deeper than 8")
     const own = await this.record(workspace, conversation, runner)
     if (own) {
-      const parsed = Schema.decodeUnknownSync(
-        Schema.Struct({
-          root: Schema.NonEmptyString,
-          directories: Schema.optional(Schema.Array(Schema.String)),
-          anchor: Schema.optional(Schema.NullOr(Schema.String)),
-        }),
-      )(own.value)
       return this.remember(workspace, conversation, runner, {
-        binding: { root: parsed.root, directories: parsed.directories ?? [], anchor: parsed.anchor ?? null },
+        binding: Schema.decodeUnknownSync(Binding)(own.value),
         source: "conversation",
         entry: own,
       })
@@ -316,10 +324,10 @@ export class Environments {
     throw new Error("environment_contended: the environment record changed while being updated")
   }
 
-  private async validate(root: string, directories: readonly string[], local: boolean) {
+  async validate(root: string, directories: readonly string[], runner: string) {
     const paths = await Promise.all(
       [root, ...directories].map(async (path) => {
-        if (!local) {
+        if (runner !== this.identity.runner) {
           if (!isAbsolute(path)) throw new Error(path + " must be an absolute path on the selected Runner")
           return path
         }
@@ -348,7 +356,7 @@ export class Environments {
 
   private async describe(workspace: string, conversation: string, runner: string, current: Resolved) {
     const port = current.binding.anchor ? this.port(workspace, current.binding.anchor) : undefined
-    const resolved = await this.validate(current.binding.root, current.binding.directories, true)
+    const resolved = await this.validate(current.binding.root, current.binding.directories, this.identity.runner)
       .then(() => true as boolean | "refused")
       .catch((error: unknown) =>
         error instanceof Error && error.message.includes("protected root") ? ("refused" as const) : false,

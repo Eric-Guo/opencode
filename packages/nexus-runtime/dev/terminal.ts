@@ -185,7 +185,6 @@ const Target = Schema.Struct({
 })
 const ObjectValue = Schema.Record(Schema.String, Schema.MutableJson)
 const object = Schema.decodeUnknownSync(ObjectValue)
-const identitySchema = Schema.Struct({ runner: Schema.String })
 
 export async function runDevelopment(args: readonly string[], terminal: DevelopmentTerminal): Promise<number> {
   const parsed = parseDevelopment(args)
@@ -454,12 +453,17 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
         return { name: basename(file), data, mime: attachmentMime(file, data) }
       }),
     )
+    const directory = parsed.text("dir")
+    const environment = directory
+      ? { root: resolve(directory), directories: (parsed.values.also ?? []).map((path) => resolve(path)) }
+      : undefined
     const opened =
       parsed.verb === "do"
         ? object(
             await call("open", {
               key: key(),
               runner: parsed.text("runner"),
+              environment,
               agent: parsed.text("agent"),
               restricted: parsed.values.restricted === true,
               model: hasInput ? undefined : parsed.text("model"),
@@ -471,8 +475,6 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     const id = opened
       ? Schema.decodeUnknownSync(Schema.String)(object(opened.conversation).public_id)
       : addressed?.conversation
-    const identity = Schema.decodeUnknownSync(identitySchema)(await call("identity"))
-    const runner = parsed.text("runner") ?? identity.runner
     const attachments = await Promise.all(
       files.map(async (file) =>
         Schema.decodeUnknownSync(Schema.String)(
@@ -500,14 +502,13 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
       if (!terminal.modes) throw new Error("Conversation mode controls are unavailable.")
       await terminal.modes(id, { code_mode: parsed.values["code-mode"] })
     }
-    if (parsed.text("dir") && terminal.extension)
-      await terminal.extension("environment.bind", {
-        conversation: id,
-        root: resolve(parsed.text("dir")!),
-        directories: (parsed.values.also ?? []).map((path) => resolve(path)),
-      })
+    if (!opened && environment) {
+      if (!terminal.extension) throw new Error("Conversation environment binding is unavailable.")
+      await terminal.extension("environment.bind", { conversation: id, ...environment })
+    }
+    const host = clean({ conversation: id, environment: opened?.environment })
     if (!hasInput) {
-      print({ conversation: id })
+      print(host)
       return 0
     }
     const submitted = object(
@@ -531,19 +532,15 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
               until: {
                 command: parsed.text("until"),
                 attempts: parsed.number("attempts"),
-                directory: parsed.text("dir"),
               },
             }
-          : {}),
-        ...(parsed.text("dir")
-          ? { executor_contexts: { [runner]: { "opencode.directory": resolve(parsed.text("dir")!) } } }
           : {}),
       }),
     )
     const receipt = object(submitted.input)
     const input = Schema.decodeUnknownSync(Schema.String)(receipt.public_id)
     if (receipt.state === "blocked") {
-      print(clean({ conversation: id, input, status: "blocked", blocked_reason: receipt.blocked_reason }))
+      print(clean({ ...host, input, status: "blocked", blocked_reason: receipt.blocked_reason }))
       return 0
     }
     const started = performance.now()
@@ -552,10 +549,7 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
       await setTimeout(250, undefined, { signal: terminal.signal })
       snapshot = await call("result", { conversation: id, input })
     }
-    const result =
-      snapshot === null
-        ? { conversation: id, input, status: "pending" }
-        : { conversation: id, input, ...object(snapshot) }
+    const result = snapshot === null ? { ...host, input, status: "pending" } : { ...host, input, ...object(snapshot) }
     if (snapshot) {
       const execution = object(object(snapshot).execution ?? {})
       if (typeof execution.run_public_id === "string")
@@ -1384,6 +1378,7 @@ export function formatDevelopment(value: JsonValue): string {
       [
         value.conversation && "conversation: " + value.conversation,
         value.input && "input: " + value.input,
+        value.environment && "environment: " + JSON.stringify(value.environment),
         ...Object.entries(value.execution).map(([key, id]) => key.replace("_public_id", "") + ": " + id),
         value.status && "status: " + value.status,
       ]

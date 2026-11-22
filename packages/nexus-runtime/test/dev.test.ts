@@ -36,7 +36,15 @@ test("development opens an idle conversation and admits attachment-only inputs w
     if (path.endsWith("/conversations") && request.method === "POST") {
       const { conversation } = (await request.json()) as { conversation: JsonObject }
       opened.push(conversation)
-      return Response.json({ conversation: conversationFixture(conversation) }, { status: 201 })
+      return Response.json(
+        {
+          conversation: conversationFixture({
+            ...conversation,
+            default_runner: { executor_public_id: conversation.default_runner_executor_public_id, presence: "online" },
+          }),
+        },
+        { status: 201 },
+      )
     }
     if (path.endsWith("/conversations/conversation"))
       return Response.json({ conversation: conversationFixture(opened.at(-1)) })
@@ -87,11 +95,34 @@ test("development opens an idle conversation and admits attachment-only inputs w
   const directory = await mkdtemp(join(tmpdir(), "nexus-attach-"))
   try {
     const first = terminal()
+    await expect(runDevelopment(["do", "--dir", join(directory, "missing")], first)).rejects.toThrow()
     for (const option of ["--instructions", "--approval", "--until"])
       await expect(runDevelopment(["do", option, "value"], first)).rejects.toThrow(option)
     expect(opened).toHaveLength(0)
-    await runDevelopment(["do", "--model", "provider/selected", "--json"], first)
-    expect(json(first.output.join(""))).toEqual({ conversation: "conversation" })
+    await runDevelopment(
+      [
+        "do",
+        "--runner",
+        "remote",
+        "--dir",
+        "/remote/project",
+        "--also",
+        "/remote/docs",
+        "--model",
+        "provider/selected",
+        "--json",
+      ],
+      first,
+    )
+    expect([...fixture.entries.values()].find((entry) => entry.key === "binding/remote")?.value).toEqual({
+      root: "/remote/project",
+      directories: ["/remote/docs"],
+      anchor: "conversation",
+    })
+    expect(json(first.output.join(""))).toEqual({
+      conversation: "conversation",
+      environment: { root: "/remote/project", directories: ["/remote/docs"], source: "conversation" },
+    })
     expect(opened).toHaveLength(1)
     expect(inputs).toHaveLength(0)
 
@@ -121,6 +152,86 @@ test("development opens an idle conversation and admits attachment-only inputs w
       model: { model: "provider/new" },
     })
     expect(uploaded).toEqual(["note", "note"])
+  } finally {
+    fixture.server.stop(true)
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("do sends the selected runner's full root set to the reply and its acceptance check", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-runner-"))
+  const storage = join(directory, "selection.json")
+  await Bun.write(storage, JSON.stringify({ runner: "remote" }))
+  const inputs: JsonObject[] = []
+  const remote = { executor_public_id: "remote", presence: "online" }
+  const chat = conversationFixture({ default_runner: remote })
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/conversations") && request.method === "POST") {
+      expect(object(object(await request.json()).conversation).default_runner_executor_public_id).toBe("remote")
+      return Response.json({ conversation: chat }, { status: 201 })
+    }
+    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: chat })
+    if (path.endsWith("/turns")) return Response.json({ turns: [], pagination: {} })
+    if (path.endsWith("/tools/assembly")) return Response.json({ tool_definitions: [], environment: {} })
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      inputs.push(object(object(await request.json()).input))
+      return Response.json({ input: inputFixture({ state: "blocked" }) }, { status: 202 })
+    }
+  })
+  try {
+    const app: NexusApplication = new NexusApplication(
+      fixture.client,
+      { workspace: "workspace", agent: "main", runner: "local" },
+      () => ({}),
+      undefined,
+      async (workspace, conversation) => ({
+        agent_configuration: {},
+        model: "provider/default",
+        fallback_models: [],
+        executor_contexts: {
+          local: { "opencode.mcp": { anchor: conversation } },
+          remote: await app.environments.capture(workspace, conversation, "remote"),
+        },
+      }),
+    )
+    app.runners.configure({ storage })
+    const terminal = {
+      command: async (input: JsonObject) => json(JSON.stringify(await app.operations.command(input))),
+      signal: new AbortController().signal,
+      write() {},
+      error() {},
+    }
+    await runDevelopment(
+      ["do", "Check it", "--dir", "/remote/project", "--also", "/remote/doc", "--until", "pwd"],
+      terminal,
+    )
+    const context = {
+      "opencode.environment": { root: "/remote/project", directories: ["/remote/doc"], anchor: "conversation" },
+    }
+    expect(inputs[0]?.executor_contexts).toEqual({
+      local: { "opencode.mcp": { anchor: "conversation" } },
+      remote: context,
+    })
+    expect(inputs[0]?.inline).toMatchObject([
+      {
+        role: "developer",
+        position: "lead",
+        text: expect.stringContaining(
+          "/remote/project. Relative paths resolve against it there.\nAdditional directories: /remote/doc",
+        ),
+      },
+    ])
+    expect(inputs[0]?.steps).toMatchObject([
+      {
+        tool: {
+          route: { kind: "runner", runner_executor_public_id: "remote" },
+          executor_context: context,
+          input: { command: "pwd" },
+        },
+      },
+      { ask: { key: "hold-1" } },
+    ])
   } finally {
     fixture.server.stop(true)
     await rm(directory, { recursive: true, force: true })
