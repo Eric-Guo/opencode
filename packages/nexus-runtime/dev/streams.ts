@@ -1,12 +1,23 @@
 import { setTimeout } from "node:timers/promises"
-import { TranscriptAccumulator, type JsonObject, type JsonValue } from "@cybros/agent"
+import { TranscriptAccumulator, type Event, type JsonObject, type JsonValue, type ProgressFrame, type TranscriptItem } from "@cybros/agent"
 import { Schema } from "effect"
+import { ownsTranscript, type TranscriptIdentity } from "../src/execution"
 import type { NexusApplication } from "../src/application"
 
+const DirectReply = Schema.Struct({
+  conversation: Schema.NonEmptyString,
+  turn: Schema.NonEmptyString,
+  variant: Schema.NonEmptyString,
+})
 const StreamCommand = Schema.Union([
   Schema.Struct({
     action: Schema.Literals(["stream.open", "stream.attach"]),
     run: Schema.NonEmptyString,
+    live: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("stream.open"),
+    ...DirectReply.fields,
     live: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({ action: Schema.Literals(["stream.poll", "stream.close"]), stream: Schema.NonEmptyString }),
@@ -15,7 +26,7 @@ const StreamCommand = Schema.Union([
 const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))
 const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))
 type Follower = {
-  run: string
+  run: string | null
   conversation: string | null
   events: { sequence: number; value: JsonObject; bytes: number }[]
   sequence: number
@@ -49,7 +60,7 @@ export class DevelopmentStreams {
         attached: row.attached,
       }))
     if (input.action === "stream.open" || input.action === "stream.attach") {
-      const follower = await this.follow(input.run, input.live !== false)
+      const follower = await this.follow("run" in input ? input.run : input, input.live !== false)
       if (input.action === "stream.attach") {
         follower.attached = true
         return { run: input.run }
@@ -93,16 +104,20 @@ export class DevelopmentStreams {
     }
   }
 
-  private async follow(run: string, live: boolean) {
+  private async follow(target: string | typeof DirectReply.Type, live: boolean) {
     const application = this.application()
-    const info = object(
-      json(
-        JSON.stringify(
-          await application.operations.command({ action: "run", run, addressed: true }, { signal: this.signal }),
-        ),
-      ),
-    )
-    const existing = this.followers.get(run)
+    const run = typeof target === "string" ? target : null
+    const turn =
+      typeof target === "string"
+        ? (
+            await application.client
+              .workspace(application.identity.workspace)
+              .run(target)
+              .fetch({ signal: this.signal })
+          ).turn
+        : { public_id: target.turn, conversation_public_id: target.conversation }
+    const key = typeof target === "string" ? target : target.variant
+    const existing = this.followers.get(key)
     if (existing && !existing.closing) {
       if (live) existing.enableLive()
       return existing
@@ -115,10 +130,7 @@ export class DevelopmentStreams {
     let observingLive = false
     const row: Follower = {
       run,
-      conversation:
-        typeof object(info.turn ?? {}).conversation_public_id === "string"
-          ? String(object(info.turn).conversation_public_id)
-          : null,
+      conversation: turn?.conversation_public_id ?? null,
       events: [],
       sequence: 0,
       lastReset: 0,
@@ -141,13 +153,13 @@ export class DevelopmentStreams {
             await socket.close()
             await Promise.allSettled(jobs)
           } finally {
-            if (this.followers.get(run) === row) this.followers.delete(run)
+            if (this.followers.get(key) === row) this.followers.delete(key)
           }
         })()
         return row.closing
       },
     }
-    this.followers.set(run, row)
+    this.followers.set(key, row)
     const push = (value: JsonObject) => {
       if (value.channel === "transcript") {
         const frame = object(value.frame)
@@ -167,19 +179,31 @@ export class DevelopmentStreams {
       row.bytes += bytes
       row.events.push({ sequence: row.sequence, value, bytes })
     }
+    const identity = {
+      run_public_id: run,
+      turn_public_id: turn?.public_id ?? null,
+      variant_public_id: typeof target === "string" ? null : target.variant,
+    }
+    const methods = row.conversation
+      ? ({
+          events: "conversationEvents",
+          transcript: "conversationTranscript",
+          progress: "conversationProgress",
+        } as const)
+      : ({ events: "runEvents", transcript: "runTranscript", progress: "runProgress" } as const)
     const watch = async (channel: "events" | "transcript" | "progress") => {
       let reconnecting = false
       while (!active.aborted) {
         try {
-          const options = { signal: active }
-          const subscription = await (channel === "events"
-            ? socket.runEvents(application.identity.workspace, run, options)
-            : channel === "transcript"
-              ? socket.runTranscript(application.identity.workspace, run, options)
-              : socket.runProgress(application.identity.workspace, run, options))
+          const subscription = await socket[methods[channel]](application.identity.workspace, row.conversation ?? key, {
+            signal: active,
+          })
           if (reconnecting && channel === "transcript") push({ channel: "resync" })
           reconnecting = true
-          for await (const frame of subscription) push({ channel, frame: json(JSON.stringify(frame)) })
+          for await (const frame of subscription) {
+            if (row.conversation && !belongsToFollower(identity, frame)) continue
+            push({ channel, frame: json(JSON.stringify(frame)) })
+          }
         } catch (error) {
           if (active.aborted) return
           push({ channel: "notice", message: error instanceof Error ? error.message : String(error) })
@@ -206,4 +230,20 @@ export class DevelopmentStreams {
   async close() {
     await Promise.allSettled([...this.followers.values()].map((row) => row.close()))
   }
+}
+
+function belongsToFollower(identity: TranscriptIdentity, frame: Event | TranscriptItem | ProgressFrame) {
+  if ("variant_public_id" in frame) return ownsTranscript(identity, frame)
+  if ("run_public_id" in frame) return !!frame.run_public_id && frame.run_public_id === identity.run_public_id
+
+  // Durable events put the execution in their payload.
+  const payload = frame.payload
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false
+  if (payload.run_public_id) return payload.run_public_id === identity.run_public_id
+  if (payload.variant_public_id)
+    return (
+      payload.variant_public_id === identity.variant_public_id && payload.turn_public_id === identity.turn_public_id
+    )
+
+  return !!identity.turn_public_id && payload.turn_public_id === identity.turn_public_id
 }
