@@ -100,7 +100,7 @@ export const Operation = Schema.Union([
     ...Conversation,
     ...Key,
     text: Schema.String,
-    model: Schema.optional(Schema.String),
+    model: Schema.optional(Schema.NullOr(Schema.String)),
     preset: Schema.optional(Schema.String),
     attachments: Schema.optional(Schema.Array(Schema.String)),
     instructions: Schema.optional(Schema.String),
