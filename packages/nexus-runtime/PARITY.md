@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`c0ebf861e5a2793cf3e384dedc1e071237a93f12`. Paths in the first column are relative
+`48ff47738cf6edacd076caf261a8ff1f02ea636f`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,10 +13,20 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The [latest verification](#mcp-catalog-previews-and-development-streams)
-covers MCP catalog previews and development CLI output.
+tests below. The [latest verification](#browser-snapshot-references)
+covers browser snapshot references.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Browser snapshot references
+
+This review used OpenCode `ab832ab28c6` and Cybros `48ff47738`. The Rho and
+TypeScript SDK sources match the previous reference pin. The [package mapping](#application-and-executor)
+and [reference tests](#reference-contract-anchors) cover all eleven runtime packages.
+
+| Workflow | Observed behavior | TypeScript checks |
+| --- | --- | --- |
+| Isolated Chromium | An element reference from a sibling or a replaced tab cannot select, click or type into the current page. Fresh snapshot references work on the replacement. | `test/browser.test.ts` |
 
 ## MCP catalog previews and development streams
 
