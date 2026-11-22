@@ -133,7 +133,20 @@ test.skipIf(!chromium)(
           .structured_content,
       ).toBe("Saved fixture")
       const second = { ...ctx, run: "second" }
-      await run("browser_navigate", { url: server.url.href }, second)
+      const sibling = await run("browser_navigate", { url: server.url.href }, second)
+      for (const action of ["browser_snapshot", "browser_click", "browser_type"]) {
+        expect(
+          await run(action, { ref: original, ...(action === "browser_type" && { text: "wrong tab" }) }, second),
+        ).toMatchObject({ is_error: true, content: expect.stringContaining("Stale") })
+      }
+      await browser.run(JSON.stringify([ctx.workspace, second.run]), owner.signal, (tab) => command(tab, "Page.close"))
+      const replacement = await run("browser_navigate", { url: server.url.href }, second)
+      expect(await run("browser_snapshot", { ref: ref(sibling.content, "textbox") }, second)).toMatchObject({
+        is_error: true,
+      })
+      expect(
+        (await run("browser_type", { ref: ref(replacement.content, "textbox"), text: "new tab" }, second)).is_error,
+      ).not.toBe(true)
       expect((await run("browser_evaluate", { expression: "document.cookie" }, second)).structured_content).toContain(
         "login=shared",
       )
