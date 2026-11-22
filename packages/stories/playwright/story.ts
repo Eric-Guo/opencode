@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test"
-import type { Locator } from "@playwright/test"
+import type {
+  Locator,
+  PlaywrightTestArgs,
+  PlaywrightTestOptions,
+  PlaywrightWorkerArgs,
+  PlaywrightWorkerOptions,
+  TestType,
+} from "@playwright/test"
 
 export { expect }
 
@@ -9,7 +16,13 @@ export { expect }
  */
 export const sourceURL = (url: URL) => `/@fs${url.pathname}`
 
-export const story = test.extend<{
+// The Vite story server uses its own mount fixture in place of Playwright's built-in fixture.
+const base: TestType<
+  Omit<PlaywrightTestArgs, "mount"> & PlaywrightTestOptions,
+  PlaywrightWorkerArgs & PlaywrightWorkerOptions
+> = test
+
+export const story = base.extend<{
   mount: (
     id: string,
     options?: { args?: Record<string, string | boolean>; globals?: Record<string, string> },
