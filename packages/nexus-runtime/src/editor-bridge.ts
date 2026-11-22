@@ -1,7 +1,7 @@
 import { RequestError, type AgentContext, type ClientCapabilities } from "@agentclientprotocol/sdk"
 import { createServer } from "node:http"
 import { Readable } from "node:stream"
-import { realpath } from "node:fs/promises"
+import { realpath, stat } from "node:fs/promises"
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path"
 import { Schema } from "effect"
 
@@ -211,14 +211,25 @@ async function editorRequest<T>(request: Promise<T>, signal: AbortSignal) {
   }
 }
 
-export async function editorRoots(cwd: string, additional: readonly string[] = []) {
-  if (![cwd, ...additional].every(isAbsolute)) throw new Error("Editor workspace roots must be absolute paths.")
-
-  const roots = [...new Set(await Promise.all([cwd, ...additional].map((path) => realpath(path))))]
-
-  if (Buffer.byteLength(JSON.stringify(roots)) > 4096) throw new Error("Editor workspace roots exceed 4096 bytes.")
-
+export function editorRoots(cwd: string, additional: readonly string[] = []) {
+  const roots = [cwd, ...additional]
+  if (!roots.every(isAbsolute))
+    throw RequestError.invalidParams(undefined, "Editor workspace roots must be absolute paths.")
+  if (Buffer.byteLength(JSON.stringify(roots)) > 4096)
+    throw RequestError.invalidParams(undefined, "Editor workspace roots exceed 4096 bytes.")
   return roots
+}
+
+export async function localEditorRoots(paths: string[]) {
+  const roots = await Promise.all(
+    paths.map(async (path) => {
+      const canonical = await realpath(path).catch(() => undefined)
+      if (!canonical || !(await stat(canonical)).isDirectory())
+        throw RequestError.invalidParams(undefined, path + " is not a directory")
+      return canonical
+    }),
+  )
+  return [...new Set(roots)]
 }
 
 // Unsaved editor buffers can live in directories that have not been created on disk yet.

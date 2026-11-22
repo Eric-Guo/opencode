@@ -5584,6 +5584,7 @@ export type ExperimentalNexusManageInput = {
         readonly model?: string | null
         readonly title?: string | null
         readonly runner?: string | null | null
+        readonly environment?: { readonly root: string; readonly directories?: ReadonlyArray<string> } | null
       }
     | {
         readonly action: "application.prepare" | "application.submit"
