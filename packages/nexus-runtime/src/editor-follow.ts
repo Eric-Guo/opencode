@@ -6,6 +6,7 @@ import {
   type TaskDetail,
   type TranscriptItem,
 } from "@cybros/agent"
+import { ownsTranscript } from "./execution"
 import { resolve } from "node:path"
 import { Schema } from "effect"
 
@@ -36,7 +37,11 @@ export class EditorTranscript {
   ) {}
 
   execution(identity: ExecutionIdentity) {
-    if (this.identity && this.identity.run_public_id !== identity.run_public_id) {
+    if (
+      this.identity &&
+      (this.identity.run_public_id !== identity.run_public_id ||
+        this.identity.variant_public_id !== identity.variant_public_id)
+    ) {
       this.sequence++
       this.transcript.reset()
     }
@@ -45,7 +50,7 @@ export class EditorTranscript {
   }
 
   frame(frame: TranscriptItem) {
-    if (!this.identity || frame.run_public_id !== this.identity.run_public_id) return Promise.resolve()
+    if (!this.identity || !ownsTranscript(this.identity, frame)) return Promise.resolve()
     if (frame.type === "round") {
       const round = Schema.decodeUnknownOption(Schema.Struct({ task_key: Schema.String, mainline: Schema.Boolean }))(
         frame.payload.round,
@@ -54,10 +59,10 @@ export class EditorTranscript {
       if (round._tag === "Some" && !round.value.mainline)
         this.branches.add(frame.run_public_id + ":" + round.value.task_key)
     }
-    if (frame.type === "call") {
+    if (frame.type === "call" && frame.run_public_id) {
       const call = Schema.decodeUnknownOption(Call)(frame.payload.call)
 
-      if (call._tag === "Some") return this.call(frame.run_public_id!, call.value)
+      if (call._tag === "Some") return this.call(frame.run_public_id, call.value)
     }
     if (frame.type === "stream_reset") {
       this.sequence++
@@ -74,13 +79,13 @@ export class EditorTranscript {
   }
 
   progress(frame: ProgressFrame) {
-    if (!this.identity || frame.run_public_id !== this.identity.run_public_id || !frame.task_key)
+    if (!frame.run_public_id || frame.run_public_id !== this.identity?.run_public_id || !frame.task_key)
       return Promise.resolve()
     if (frame.type === "round_started" && frame.payload.mainline === false)
       this.branches.add(frame.run_public_id + ":" + frame.task_key)
     if (!["step_started", "step_claimed", "task_progress"].includes(frame.type)) return Promise.resolve()
 
-    return this.call(frame.run_public_id!, {
+    return this.call(frame.run_public_id, {
       task_key: frame.task_key,
       name: frame.tool_name,
       status: typeof frame.payload.status === "string" ? frame.payload.status : "running",
