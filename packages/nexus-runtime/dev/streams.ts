@@ -236,7 +236,7 @@ function belongsToFollower(identity: TranscriptIdentity, frame: Event | Transcri
   if ("variant_public_id" in frame) return ownsTranscript(identity, frame)
   if ("run_public_id" in frame) return !!frame.run_public_id && frame.run_public_id === identity.run_public_id
 
-  // Durable events put the execution in their payload.
+  // Durable events put the execution in their payload. A scheduled input can precede its turn.
   const payload = frame.payload
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false
   if (payload.run_public_id) return payload.run_public_id === identity.run_public_id
@@ -245,5 +245,7 @@ function belongsToFollower(identity: TranscriptIdentity, frame: Event | Transcri
       payload.variant_public_id === identity.variant_public_id && payload.turn_public_id === identity.turn_public_id
     )
 
-  return !!identity.turn_public_id && payload.turn_public_id === identity.turn_public_id
+  return (
+    frame.type === "input_accepted" || (!!identity.turn_public_id && payload.turn_public_id === identity.turn_public_id)
+  )
 }
