@@ -269,6 +269,42 @@ for (const verb of ["watch", "follow"])
     expect(calls.at(-1)).toBe("stream.close")
   })
 
+for (const verb of ["watch", "follow"])
+  test(verb + " marks discarded output once after a stream reset", async () => {
+    const frame = (type: string, text = "") => ({ channel: "transcript", frame: { type, payload: { text } } })
+    for (const lost of [0, 1]) {
+      const output: string[] = []
+      const exit = await runDevelopment([verb, "run", "--timeout", "0"], {
+        signal: AbortSignal.timeout(1000),
+        command: async ({ action }): Promise<JsonValue> => {
+          if (action === "target") return { workspace: "w", conversation: "c", run: "run", side: false }
+          if (action === "stream.open") return { stream: "s", text: "Draft", text_length: 5 }
+          if (action === "stream.poll")
+            return {
+              lost,
+              reset: true,
+              text: "Draft revised",
+              text_length: 13,
+              events: [
+                frame("stream_reset"),
+                frame("reasoning_delta", "private reasoning"),
+                frame("stream_reset"),
+                frame("text_delta", "Draft revised"),
+              ],
+            }
+          if (action === "run") return { status: "completed", tasks: [] }
+          if (action === "run.result") return { output: "Draft revised" }
+          if (action === "stream.close") return null
+          throw new Error(String(action))
+        },
+        write: (part) => output.push(String(part)),
+        error() {},
+      })
+      expect(output.join("")).toBe("Draft\n(restarted — the text above was discarded)\nDraft revised\nstatus: completed\n")
+      expect(exit).toBe(0)
+    }
+  })
+
 test("development CLI preserves exact old-run results, explicit pause force, authored steps and resolution tokens", async () => {
   const writes: { path: string; body: unknown }[] = []
   const fixture = storeFixture(async (request) => {
@@ -854,7 +890,7 @@ test("explicit workspace member addressing preserves recipient policy and immuta
 })
 
 test("development live streams use daemon credentials, carry transcript frames and close only their subscription", async () => {
-  const subscribed = Promise.withResolvers<(text: string) => void>()
+  const subscribed = Promise.withResolvers<(text: string, type?: string) => void>()
   const closed = Promise.withResolvers<void>()
   const requests: string[] = []
   const server = Bun.serve({
@@ -878,11 +914,11 @@ test("development live streams use daemon credentials, carry transcript frames a
         socket.send(JSON.stringify({ type: "confirm_subscription", identifier: request.identifier }))
         const identifier = object(JSON.parse(request.identifier))
         if (identifier.items !== "transcript") return
-        subscribed.resolve((text) =>
+        subscribed.resolve((text, type = "text_delta") =>
           socket.send(
             JSON.stringify({
               identifier: request.identifier,
-              message: { event: { type: "text_delta", run_public_id: "run", text } },
+              message: { event: { type, run_public_id: "run", text } },
             }),
           ),
         )
@@ -910,6 +946,8 @@ test("development live streams use daemon credentials, carry transcript frames a
     const stream = object(await streams.command({ action: "stream.open", run: "run" })).stream
     const slower = object(await streams.command({ action: "stream.open", run: "run" })).stream
     const send = await subscribed.promise
+    send("discarded")
+    send("", "stream_reset")
     send("prefix")
     send("x".repeat(1024 * 1024))
     send("suffix")
@@ -920,9 +958,11 @@ test("development live streams use daemon credentials, carry transcript frames a
       await new Promise<void>((resolve) => setImmediate(resolve))
     }
     const page = object(await streams.command({ action: "stream.poll", stream: slower }))
-    expect(page).toMatchObject({ lost: 1, text_length: 1024 * 1024 + 12 })
+    expect(page).toMatchObject({ lost: 1, reset: true, text_length: 1024 * 1024 + 12 })
     expect(String(page.text)).toEndWith("suffix")
     expect(page.events).toMatchObject([
+      { frame: { payload: { text: "discarded" } } },
+      { frame: { type: "stream_reset" } },
       { frame: { payload: { text: "prefix" } } },
       { frame: { payload: { text: "suffix" } } },
     ])
