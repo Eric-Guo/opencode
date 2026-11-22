@@ -740,7 +740,9 @@ test("development prompt preview uses the next input's declaration and model wit
       estimates.push(object(object(await request.json()).context_estimate))
       return Response.json({ context_estimate: { ...rendered, ...rendered.rendered } })
     }
-    if (!["GET", "HEAD"].includes(request.method) && !path.endsWith("/store_entries"))
+    if (path.endsWith("/inputs") && request.headers.get("idempotency-key") === "prior")
+      return Response.json({ input: inputFixture() }, { status: 202 })
+    if (!["GET", "HEAD"].includes(request.method) && !path.includes("/store_entries"))
       throw new Error("Unexpected mutation in prompt preview")
   })
   const policy = {
@@ -793,7 +795,7 @@ test("development prompt preview uses the next input's declaration and model wit
     expect(output[0]).toContain('"text": "Preview text"')
     expect(fixture.state.writes).toBe(0)
 
-    await application.captureInput({
+    await application.submit({
       workspace: "workspace",
       conversation: "conversation",
       key: "prior",
@@ -1103,6 +1105,9 @@ test("explicit workspace member addressing preserves recipient policy and immuta
     expect(submitted.at(-1)?.model).toEqual({ model: "main-model" })
     await application.submit({ ...input, key: "return-foreign" })
     expect(submitted.at(-1)?.model).toEqual({ model: "foreign/replacement" })
+    await application.submit({ ...input, key: "clear-foreign", model: null })
+    await application.submit({ ...input, key: "continue-foreign" })
+    expect(submitted.at(-1)).not.toHaveProperty("model")
   } finally {
     fixture.server.stop(true)
   }

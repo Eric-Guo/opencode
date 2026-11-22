@@ -52,7 +52,7 @@ export const Command = Schema.Union([
     conversation: Schema.String,
     key: Schema.NonEmptyString,
     text: Schema.NonEmptyString,
-    model: Schema.String.pipe(optional),
+    model: Schema.NullOr(Schema.String).pipe(optional),
     speaker: Schema.String.pipe(optional),
     attachments: Schema.Array(Schema.String).pipe(optional),
     delivery: Schema.Literals(["queue", "steer", "steer_now"]).pipe(optional),

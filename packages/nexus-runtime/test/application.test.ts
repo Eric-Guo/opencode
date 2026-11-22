@@ -323,6 +323,19 @@ test("Mainline model inheritance follows settled execution while explicit choice
     await open().submit(explicit)
     await open().submit({ ...input, key: "after-replay" })
     expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/new-choice" })
+    const clear = { ...input, key: "automatic", model: null }
+    await open().captureInput(clear)
+    await open().submit({ ...input, key: "before-clear" })
+    expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/new-choice" })
+    state.currentDefault = "provider/later"
+    await open().submit(clear)
+    expect(submitted.at(-1)?.body.model_selection).toMatchObject({ source: "default", model: "provider/new-default" })
+    await open().submit({ ...input, key: "after-clear" })
+    expect(submitted.at(-1)?.body.model_selection).toMatchObject({ source: "default", model: "provider/later" })
+    await open().submit({ ...input, key: "same-as-default", model: state.currentDefault })
+    state.currentDefault = "provider/changed"
+    await open().submit({ ...input, key: "after-explicit" })
+    expect(submitted.at(-1)?.body.model_selection).toMatchObject({ source: "explicit", model: "provider/later" })
   } finally {
     fixture.server.stop(true)
   }
