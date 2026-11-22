@@ -27,7 +27,7 @@ and [reference tests](#reference-contract-anchors) cover all eleven runtime pack
 | Workflow | Observed behavior | TypeScript checks |
 | --- | --- | --- |
 | One-shot prompts and ACP | A direct reply streams on the conversation channel under its turn and variant. A loop-backed reply uses the same channel and carries a run ID. Other executions cannot contribute text or tool progress. Settling a reply emits its remaining text once. | `test/run.test.ts`, `test/editor.test.ts` |
-| Development watch and follow | Standalone runs subscribe to run feeds. Conversation observers subscribe to conversation feeds, follow the streaming variant during regeneration and reconcile the final answer over HTTP. | `test/dev.test.ts`, `test/dev-worker.test.ts` |
+| Development watch and follow | Standalone runs subscribe to run feeds. Conversation observers subscribe to conversation feeds, follow the streaming variant during regeneration and reconcile the final answer over HTTP. Scheduled inputs include their ID and delivery time. | `test/dev.test.ts`, `test/dev-worker.test.ts` |
 | Isolated Chromium | An element reference from a sibling or a replaced tab cannot select, click or type into the current page. Fresh snapshot references work on the replacement. | `test/browser.test.ts` |
 
 **Live Nexus.** A source one-shot prompt and development observer received live
@@ -39,6 +39,12 @@ events and completed after its structured question was resolved. Each scratch
 workspace returned HTTP 404 after deletion. The browser and ACP checks used
 isolated test peers. The [UI ledger](../nexus-ui/docs/rho-webui-parity.md#new-chat-runner-selection)
 records the runner-selection checks.
+
+**Verification.** Runtime conformance passed 434 tests on macOS with one
+Linux-only filename test skipped. Both runtime type checks, the build, the
+CLI and Server Nexus adapter tests, the Protocol identifier test and root
+`bun run check` passed. The reference suites passed 177 Ruby tests across
+all eleven packages.
 
 ## MCP catalog previews and development streams
 
