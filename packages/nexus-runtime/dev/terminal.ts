@@ -177,6 +177,10 @@ const Target = Schema.Struct({
   workspace: Schema.String,
   conversation: Schema.NullOr(Schema.String),
   run: Schema.NullOr(Schema.String),
+  turn: Schema.optional(Schema.NullOr(Schema.String)),
+  variant: Schema.optional(Schema.NullOr(Schema.String)),
+  status: Schema.optional(Schema.String),
+  content: Schema.optional(Schema.NullOr(Schema.String)),
   side: Schema.Boolean,
 })
 const ObjectValue = Schema.Record(Schema.String, Schema.MutableJson)
@@ -1091,7 +1095,7 @@ async function followDevelopment(
   const call = (action: string, fields: Record<string, unknown> = {}) =>
     terminal.command(clean({ action, addressed: true, ...fields }))
   const deadline = parsed.number("timeout")
-  const state: { stream?: string; run?: string } = {}
+  const state: { stream?: string; execution?: string; turn?: string | null } = {}
   let printed = false
   let midLine: "text" | "reasoning" | undefined
   const breakLine = () => {
@@ -1149,24 +1153,31 @@ async function followDevelopment(
     while (!terminal.signal.aborted) {
       if (!target.run && target.conversation)
         target = Schema.decodeUnknownSync(Target)(await call("target", { host: target.conversation }))
-      if (!target.run) {
+      const execution = target.run ?? target.variant
+      if (!execution) {
         await wait(250)
         continue
       }
-      if (state.run !== target.run) {
+      if (state.execution !== execution) {
         if (state.stream) await call("stream.close", { stream: state.stream })
         const opened = object(
           await call("stream.open", {
-            run: target.run,
+            ...(target.run
+              ? { run: target.run }
+              : { conversation: target.conversation, turn: target.turn, variant: target.variant }),
             live: parsed.values.stream !== false || parsed.values.reasoning,
           }),
         )
         state.stream = Schema.decodeUnknownSync(Schema.String)(opened.stream)
-        state.run = target.run
-        breakLine()
-        printed = false
-        text.reset()
-        reasoning.reset()
+        if (target.turn && target.turn === state.turn) reset()
+        else {
+          breakLine()
+          printed = false
+          text.reset()
+          reasoning.reset()
+        }
+        state.turn = target.turn
+        state.execution = execution
         snapshot(opened)
         seen.clear()
       }
@@ -1184,7 +1195,8 @@ async function followDevelopment(
         }
         if (event.channel === "resync") continue
         const frame = object(event.frame)
-        const payload = object(frame.payload ?? {})
+        const payload = frame.payload ?? {}
+        if (typeof payload !== "object" || Array.isArray(payload)) continue
         // The snapshot already includes transcript deltas and resets through this poll's cursor.
         if (
           lost &&
@@ -1205,6 +1217,16 @@ async function followDevelopment(
           breakLine()
           terminal.write(parsed.values.json ? JSON.stringify(frame) + "\n" : formatDevelopment(frame))
         }
+      }
+      if (!target.run) {
+        if (["completed", "canceled", "failed", "timed_out"].includes(target.status ?? "")) {
+          if (typeof target.content === "string") partial(target.content, "text")
+          breakLine()
+          terminal.write("status: " + target.status + "\n")
+          return target.status === "completed" ? 0 : 1
+        }
+        await wait(100)
+        continue
       }
       const info = object(await call("run", { run: target.run }))
       const tasks = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(info.tasks ?? [])
@@ -1238,7 +1260,7 @@ async function followDevelopment(
       if (["completed", "canceled", "failed", "timed_out", "needs_attention"].includes(String(status))) {
         if (target.conversation && parsed.args[0] === target.conversation && parsed.text("host-type") !== "run") {
           const next = Schema.decodeUnknownSync(Target)(await call("target", { host: target.conversation }))
-          if (next.run && next.run !== target.run) {
+          if ((next.run ?? next.variant) && (next.run ?? next.variant) !== execution) {
             target = next
             continue
           }
