@@ -397,9 +397,11 @@ export class Operations {
               .conversation(input.host)
               .turns.list({ before_position: TURN_POSITION_CEILING, limit: 1 }, options)
           ).items.at(-1)?.public_id
-        const variant = turn
-          ? (await workspace.conversation(input.host).turns.variants(turn, options)).items.find((row) => row.active)
-          : undefined
+        const variants = turn ? (await workspace.conversation(input.host).turns.variants(turn, options)).items : []
+        // A regeneration can stream while the preceding completed variant is still selected.
+        const variant =
+          variants.find((row) => row.status === "running" || row.status === "pending") ??
+          variants.find((row) => row.active)
 
         return {
           workspace: selected,
@@ -407,6 +409,7 @@ export class Operations {
           turn: turn ?? null,
           variant: variant?.public_id ?? null,
           run: variant?.run_public_id ?? null,
+          ...(variant && !variant.run_public_id ? { status: variant.status, content: variant.content } : {}),
           side: conversation.side,
         }
       }
