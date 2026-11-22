@@ -13,12 +13,12 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The [latest verification](#browser-snapshot-references)
-covers browser snapshot references.
+tests below. The [latest verification](#conversation-streams-and-browser-references)
+covers conversation streams and browser references.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
-## Browser snapshot references
+## Conversation streams and browser references
 
 This review used OpenCode `ab832ab28c6` and Cybros `48ff47738`. The Rho and
 TypeScript SDK sources match the previous reference pin. The [package mapping](#application-and-executor)
@@ -26,7 +26,11 @@ and [reference tests](#reference-contract-anchors) cover all eleven runtime pack
 
 | Workflow | Observed behavior | TypeScript checks |
 | --- | --- | --- |
+| One-shot prompts and ACP | A direct reply streams on the conversation channel under its turn and variant. A loop-backed reply uses the same channel and carries a run ID. Other executions cannot contribute text or tool progress. Settling a reply emits its remaining text once. | `test/run.test.ts`, `test/editor.test.ts` |
 | Isolated Chromium | An element reference from a sibling or a replaced tab cannot select, click or type into the current page. Fresh snapshot references work on the replacement. | `test/browser.test.ts` |
+
+**Live Nexus.** The source one-shot prompt received direct-reply deltas through the Human connection at
+`localhost:3000` and returned one final answer. The ACP regression used an isolated test peer.
 
 ## MCP catalog previews and development streams
 
