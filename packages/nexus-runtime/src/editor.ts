@@ -189,8 +189,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     signal: AbortSignal,
   ) => {
     const streaming = new AbortController()
-    const watchers: Promise<void>[] = []
-    const runs = new Set<string>()
+    let watcher: Promise<void> | undefined
     const dismissed = new Set<string>()
 
     try {
@@ -199,39 +198,45 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
         if (execution.blocked_reason) throw new RequestError(-32603, execution.blocked_reason)
         if (snapshot) transcript.execution(snapshot.execution)
+        if (snapshot && !watcher) {
+          watcher = (async () => {
+            const { RealtimeClient } = await import("@cybros/agent/realtime")
+            const realtime = new RealtimeClient({
+              baseURL: nexus.status.origin,
+              credentialProvider,
+              timeoutMs: 5000,
+            })
+
+            try {
+              const options = { signal: AbortSignal.any([signal, streaming.signal]) }
+
+              const watch = async (subscribe: () => Promise<void>) => {
+                while (!options.signal.aborted) {
+                  await subscribe().catch(() => {})
+                  if (!options.signal.aborted) await setTimeout(1000, undefined, options)
+                }
+              }
+              await Promise.allSettled([
+                watch(async () => {
+                  for await (const frame of await realtime.conversationTranscript(
+                    nexus.identity!.workspace,
+                    id,
+                    options,
+                  ))
+                    await transcript.frame(frame)
+                }),
+                watch(async () => {
+                  for await (const frame of await realtime.conversationProgress(nexus.identity!.workspace, id, options))
+                    await transcript.progress(frame)
+                }),
+              ])
+            } finally {
+              await realtime.close()
+            }
+          })().catch(() => {})
+        }
         if (snapshot?.execution.run_public_id) {
           const run = snapshot.execution.run_public_id
-
-          if (!runs.has(run)) {
-            runs.add(run)
-            watchers.push(
-              (async () => {
-                const { RealtimeClient } = await import("@cybros/agent/realtime")
-                const realtime = new RealtimeClient({
-                  baseURL: nexus.status.origin,
-                  credentialProvider,
-                  timeoutMs: 5000,
-                })
-
-                try {
-                  const options = { signal: AbortSignal.any([signal, streaming.signal]) }
-
-                  await Promise.allSettled([
-                    (async () => {
-                      for await (const frame of await realtime.runTranscript(nexus.identity!.workspace, run, options))
-                        await transcript.frame(frame)
-                    })(),
-                    (async () => {
-                      for await (const frame of await realtime.runProgress(nexus.identity!.workspace, run, options))
-                        await transcript.progress(frame)
-                    })(),
-                  ])
-                } finally {
-                  await realtime.close()
-                }
-              })().catch(() => {}),
-            )
-          }
           const rows = await nexus.workspace.run(run).transcript({ limit: 100 }, { signal })
 
           for (const round of rows.rounds.filter((round) => round.mainline))
@@ -239,7 +244,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
         }
         if (snapshot?.terminal) {
           streaming.abort()
-          await Promise.allSettled(watchers)
+          await watcher
           await transcript.settle(snapshot.content ?? "")
           if (["failed", "timed_out", "uncertain"].includes(snapshot.status ?? "") || snapshot.failure_reason)
             throw new RequestError(-32603, snapshot.failure_reason ?? "Nexus execution failed", {
@@ -396,7 +401,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       throw error
     } finally {
       streaming.abort()
-      await Promise.allSettled(watchers)
+      await watcher
     }
   }
   const background = new Set<Promise<void>>()
