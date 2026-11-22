@@ -1207,7 +1207,9 @@ async function followDevelopment(
         }
       }
       const info = object(await call("run", { run: target.run }))
-      for (const task of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(info.tasks ?? [])) {
+      const tasks = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(info.tasks ?? [])
+
+      for (const task of tasks) {
         const signature = JSON.stringify(task)
         const key = String(task.key)
         if (seen.get(key) === signature) continue
@@ -1229,10 +1231,11 @@ async function followDevelopment(
         const result = object(await call("run.result", { run: target.run }))
         if (typeof result.output === "string") partial(result.output, "text")
       }
-      const finished =
-        ["completed", "canceled", "failed", "needs_attention"].includes(String(info.status)) ||
-        ["completed", "failed", "canceled"].includes(String(object(info.turn ?? {}).status))
-      if (finished) {
+      const turnStatus = object(info.turn ?? {}).status
+      const status = ["completed", "failed", "canceled", "timed_out"].includes(String(turnStatus))
+        ? turnStatus
+        : info.status
+      if (["completed", "canceled", "failed", "timed_out", "needs_attention"].includes(String(status))) {
         if (target.conversation && parsed.args[0] === target.conversation && parsed.text("host-type") !== "run") {
           const next = Schema.decodeUnknownSync(Target)(await call("target", { host: target.conversation }))
           if (next.run && next.run !== target.run) {
@@ -1241,8 +1244,23 @@ async function followDevelopment(
           }
         }
         breakLine()
-        terminal.write("status: " + String(info.status) + "\n")
-        return info.status === "completed" || object(info.turn ?? {}).status === "completed" ? 0 : 1
+        terminal.write("status: " + status + "\n")
+        if (
+          parsed.verb === "watch" &&
+          !parsed.values.json &&
+          !["completed", "failed", "canceled"].includes(String(info.status))
+        ) {
+          if (turnStatus === "failed")
+            terminal.write(`holding: use retry ${target.run} [TASK] or answer ${target.run} TASK TEXT to continue\n`)
+          if (turnStatus === "completed")
+            for (const task of tasks) {
+              if (["completed", "failed", "timed_out", "uncertain", "canceled", "skipped"].includes(String(task.status)))
+                continue
+
+              terminal.write(`background: ${task.key} ${task.status} — its result reaches the next turn\n`)
+            }
+        }
+        return status === "completed" ? 0 : 1
       }
       await wait(100)
     }
