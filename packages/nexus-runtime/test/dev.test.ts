@@ -10,6 +10,7 @@ import { NexusApplication } from "../src/application"
 import type { ApprovalGrant } from "../src/approval-grant"
 import { runDevelopment, parseDevelopment } from "../dev/terminal"
 import { DevelopmentStreams } from "../dev/streams"
+import { conversationFeeds } from "./fixture/conversation-feeds"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
 
@@ -203,6 +204,72 @@ test("turns traverses forward pages, prints reply prompts and offers the exclusi
     expect(requests).toHaveLength(1)
   } finally {
     fixture.server.stop(true)
+  }
+})
+
+test("watch streams a direct reply by turn and variant and recovers only the remaining text", async () => {
+  const output: string[] = []
+  using peer = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    websocket: conversationFeeds,
+    fetch(request, server) {
+      if (server.upgrade(request, { headers: { "Sec-WebSocket-Protocol": "actioncable-v1-json" } })) return
+      const path = new URL(request.url).pathname
+      if (path.endsWith("/conversations/conversation"))
+        return Response.json({ conversation: conversationFixture({ active_turn_public_id: "own" }) })
+      if (path.endsWith("/turns/own/variants")) {
+        const settled = output.includes("Own")
+        return Response.json({
+          turn: { public_id: "own" },
+          variants: [
+            { public_id: "sibling", source: "original", status: "completed", active: !settled, content: "Old answer" },
+            {
+              public_id: "first",
+              source: "model",
+              active: settled,
+              run_public_id: null,
+              status: settled ? "completed" : "running",
+              content: settled ? "Own answer" : null,
+            },
+          ],
+        })
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+  const options = { baseURL: peer.url.origin, credential: "fixture" }
+  const app = new NexusApplication(
+    new Client(options),
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => new RealtimeClient(options),
+  )
+  const signal = AbortSignal.timeout(3000)
+  const streams = new DevelopmentStreams(() => app, signal)
+  try {
+    expect(
+      await runDevelopment(["watch", "conversation"], {
+        command: async (input) =>
+          String(input.action).startsWith("stream.")
+            ? streams.command(input)
+            : json(JSON.stringify(await app.operations.command(input))),
+        signal,
+        write: (value) => output.push(value.toString()),
+        error: (value) => {
+          throw new Error(value)
+        },
+      }),
+    ).toBe(0)
+    expect(output.join("")).toBe("Own answer\nstatus: completed\n")
+  } finally {
+    await streams.close()
   }
 })
 
@@ -927,6 +994,7 @@ test("development live streams use daemon credentials, carry transcript frames a
         if (request.command !== "subscribe") return
         socket.send(JSON.stringify({ type: "confirm_subscription", identifier: request.identifier }))
         const identifier = object(JSON.parse(request.identifier))
+        expect(identifier).toMatchObject({ channel: "AgentAPI::V1::RunEventsChannel", run_id: "run" })
         if (identifier.items !== "transcript") return
         subscribed.resolve((text, type = "text_delta") =>
           socket.send(
