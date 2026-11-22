@@ -270,38 +270,52 @@ for (const verb of ["watch", "follow"])
   })
 
 for (const verb of ["watch", "follow"])
-  test(verb + " marks discarded output once after a stream reset", async () => {
+  test(verb + " marks discarded output once and reports the selected turn's outcome", async () => {
     const frame = (type: string, text = "") => ({ channel: "transcript", frame: { type, payload: { text } } })
     for (const lost of [0, 1]) {
-      const output: string[] = []
-      const exit = await runDevelopment([verb, "run", "--timeout", "0"], {
-        signal: AbortSignal.timeout(1000),
-        command: async ({ action }): Promise<JsonValue> => {
-          if (action === "target") return { workspace: "w", conversation: "c", run: "run", side: false }
-          if (action === "stream.open") return { stream: "s", text: "Draft", text_length: 5 }
-          if (action === "stream.poll")
-            return {
-              lost,
-              reset: true,
-              text: "Draft revised",
-              text_length: 13,
-              events: [
-                frame("stream_reset"),
-                frame("reasoning_delta", "private reasoning"),
-                frame("stream_reset"),
-                frame("text_delta", "Draft revised"),
-              ],
-            }
-          if (action === "run") return { status: "completed", tasks: [] }
-          if (action === "run.result") return { output: "Draft revised" }
-          if (action === "stream.close") return null
-          throw new Error(String(action))
-        },
-        write: (part) => output.push(String(part)),
-        error() {},
-      })
-      expect(output.join("")).toBe("Draft\n(restarted — the text above was discarded)\nDraft revised\nstatus: completed\n")
-      expect(exit).toBe(0)
+      for (const outcome of ["completed", "failed", "timed_out"]) {
+        const output: string[] = []
+        const exit = await runDevelopment([verb, "run", "--timeout", "0"], {
+          signal: AbortSignal.timeout(1000),
+          command: async ({ action }): Promise<JsonValue> => {
+            if (action === "target") return { workspace: "w", conversation: "c", run: "run", side: false }
+            if (action === "stream.open") return { stream: "s", text: "Draft", text_length: 5 }
+            if (action === "stream.poll")
+              return {
+                lost,
+                reset: true,
+                text: "Draft revised",
+                text_length: 13,
+                events: [
+                  frame("stream_reset"),
+                  frame("reasoning_delta", "private reasoning"),
+                  frame("stream_reset"),
+                  frame("text_delta", "Draft revised"),
+                ],
+              }
+            if (action === "run")
+              return { status: "running", turn: { status: outcome }, tasks: [{ key: "child", status: "running" }] }
+            if (action === "run.result") return { output: "Draft revised" }
+            if (action === "stream.close") return null
+            throw new Error(String(action))
+          },
+          write: (part) => output.push(String(part)),
+          error() {},
+        })
+        const expected = [
+          "Draft",
+          "(restarted — the text above was discarded)",
+          "Draft revised",
+          "running  child",
+          "status: " + outcome,
+        ]
+        if (verb === "watch" && outcome === "completed")
+          expected.push("background: child running — its result reaches the next turn")
+        if (verb === "watch" && outcome === "failed")
+          expected.push("holding: use retry run [TASK] or answer run TASK TEXT to continue")
+        expect(output.join("").trimEnd().split("\n")).toEqual(expected)
+        expect(exit).toBe(outcome === "completed" ? 0 : 1)
+      }
     }
   })
 
