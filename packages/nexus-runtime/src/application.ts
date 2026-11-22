@@ -12,6 +12,7 @@ import type {
   ToolDefinition,
 } from "@cybros/agent"
 import { Schema } from "effect"
+import type { Nexus } from "@opencode/schema/nexus"
 import type { RealtimeClient } from "@cybros/agent/realtime"
 import type { ApprovalGrant } from "./approval-grant"
 import { setTimeout } from "node:timers/promises"
@@ -24,7 +25,7 @@ import type { McpDirectory, PresetInventory } from "./preset-mcp"
 import { MemoryReviews } from "./memory-review"
 import { Until, untilParagraph } from "./until"
 import { TurnLifecycle } from "./turn-lifecycle"
-import { Environments } from "./environments"
+import { boundRootDescription, Environments } from "./environments"
 import { SideConversations, sideLeads, sideReadTools } from "./sides"
 import { StoreDocument } from "./document"
 import { ConversationTitles } from "./conversation-titles"
@@ -322,6 +323,7 @@ export class NexusApplication {
       title?: string
       workspace?: string
       runner?: string | null
+      environment?: Nexus.EnvironmentRoots
       model?: string
       agent?: string
       restricted?: boolean
@@ -343,6 +345,19 @@ export class NexusApplication {
           (row) => row.public_id === this.identity.agent,
         )
       : undefined
+    const runner =
+      input.runner === undefined
+        ? recipient === this.identity.agent || registered
+          ? await this.runners.default()
+          : null
+        : input.runner
+    const paths = input.environment
+      ? await this.environments.validate(
+          input.environment.root,
+          input.environment.directories ?? [],
+          runner ?? this.identity.runner,
+        )
+      : undefined
     const model = input.model?.trim()
     const metadata =
       recipient === this.identity.agent
@@ -354,12 +369,7 @@ export class NexusApplication {
     const result = await this.member.workspace(workspace).conversations.create(
       {
         answering_user_public_id: recipient,
-        default_runner_executor_public_id:
-          input.runner === undefined
-            ? recipient === this.identity.agent || registered
-              ? await this.runners.default()
-              : null
-            : input.runner,
+        default_runner_executor_public_id: runner,
         ...(input.restricted
           ? {
               access: {
@@ -375,6 +385,14 @@ export class NexusApplication {
       },
       { ...options, idempotencyKey: input.key },
     )
+    const environment = paths
+      ? await this.environments.initialize(
+          workspace,
+          result.conversation.public_id,
+          result.conversation.default_runner?.executor_public_id ?? this.identity.runner,
+          paths,
+        )
+      : undefined
     if (recipient === this.identity.agent) {
       const modes = new StoreDocument(
         this.member.workspace(workspace).conversation(result.conversation.public_id).storeEntries,
@@ -394,7 +412,7 @@ export class NexusApplication {
       )
     }
     this.lifecycle.adopt(result.conversation.workspace_public_id, result.conversation.public_id)
-    return result
+    return environment ? { ...result, environment } : result
   }
 
   async submit(input: ApplicationInput, author = this.member, options: RequestOptions = {}) {
@@ -619,12 +637,19 @@ export class NexusApplication {
         : prepared.tools
     const executor_contexts =
       input.executor_contexts ?? prepared.executor_contexts ?? (foreignSide ? undefined : this.environment?.())
+    const runner = conversation.default_runner?.executor_public_id
+    const lead = [
+      runner ? boundRootDescription(executor_contexts?.[runner]) : undefined,
+      input.instructions,
+      model ? this.defaults().hints?.(model) : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n\n")
     const instructions = Schema.decodeUnknownSync(
       Schema.Struct({ system_prompt: Schema.optional(Schema.Struct({ content: Schema.String })) }),
     )(prepared.agent_configuration).system_prompt?.content
     const acceptance = input.until
       ? await (async () => {
-          const runner = conversation.default_runner?.executor_public_id
           if (!runner || !executor_contexts?.[runner])
             throw new Error("Acceptance checks require a captured runner environment.")
           if (
@@ -660,7 +685,7 @@ export class NexusApplication {
                 )(tool)
                 return !tools || tools.includes(definition.function?.name ?? definition.name ?? "")
               }) as ToolDefinition[],
-              instructions: [instructions, input.instructions, untilParagraph(policy)].filter(Boolean).join("\n\n"),
+              instructions: [instructions, lead, untilParagraph(policy)].filter(Boolean).join("\n\n"),
             },
           })
         })()
@@ -684,11 +709,7 @@ export class NexusApplication {
               ...(foreignSide ? { "nexus.addressed": { recipient: conversation.answering_user_public_id } } : {}),
             },
           }
-        : {
-            instructions: [input.instructions, model ? this.defaults().hints?.(model) : undefined]
-              .filter(Boolean)
-              .join("\n\n"),
-          }),
+        : { instructions: lead }),
       ...(input.approval ? { approval_mode: input.approval } : {}),
       ...(input.deliver_at ? { deliver_at: input.deliver_at } : {}),
       ...(input.deliver_in ? { deliver_in: input.deliver_in } : {}),
@@ -722,13 +743,7 @@ export class NexusApplication {
       ...(acceptance
         ? {
             ...acceptance,
-            instructions: [
-              input.instructions,
-              model ? this.defaults().hints?.(model) : undefined,
-              acceptance.instructions,
-            ]
-              .filter(Boolean)
-              .join("\n\n"),
+            instructions: [lead, acceptance.instructions].filter(Boolean).join("\n\n"),
           }
         : {}),
       ...(tools ? { tool_names: [...tools] } : {}),

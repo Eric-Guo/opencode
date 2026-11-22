@@ -1,6 +1,7 @@
 import { TURN_POSITION_CEILING } from "./history"
 import { executionSnapshot, repairTaskKey } from "./execution"
 import { Schema } from "effect"
+import { Nexus } from "@opencode/schema/nexus"
 import {
   APIError,
   Conflict,
@@ -64,6 +65,7 @@ export const Operation = Schema.Union([
     model: Schema.optional(Schema.NonEmptyString),
     title: Schema.optional(Schema.String),
     runner: Schema.optional(Schema.String),
+    environment: Schema.optional(Nexus.EnvironmentRoots),
     agent: Schema.optional(Schema.String),
     restricted: Schema.optional(Schema.Boolean),
   }),
