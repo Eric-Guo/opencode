@@ -2,6 +2,8 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { NexusApplication } from "../src/application"
+import { storeFixture } from "./fixture/store"
 import { conventions, conventionsExtension } from "../src/conventions"
 import { ExtensionManager } from "../src/extension-manager"
 import { Configuration } from "../src/configuration"
@@ -43,12 +45,15 @@ test("conventions pay for nearby instructions first and render general instructi
 
 test("captured editor capabilities add buffer guidance without a durable port credential", async () => {
   const directory = await mkdtemp(join(tmpdir(), "nexus-editor-conventions-"))
+  const fixture = storeFixture()
+  const app = new NexusApplication(fixture.client, { workspace: "ws", agent: "agent", runner: "local" }, () => ({}))
   const manager = new ExtensionManager(
     new Configuration(join(directory, "settings.json")),
     [conventionsExtension()],
     directory,
     new AbortController().signal,
     async () => {},
+    () => app,
   )
   try {
     await manager.start()
@@ -59,8 +64,18 @@ test("captured editor capabilities add buffer guidance without a durable port cr
       }),
     ).toContain("The editor's open buffers are what read, edit and write see")
     expect(await manager.describeEnvironment({ root: directory, "opencode.environment": { root: directory } })).toBe("")
+    await Bun.write(join(directory, "AGENTS.md"), "Local instructions")
+    const local = { "opencode.mcp": { anchor: "conversation" } }
+    expect(await manager.describeEnvironment({ local })).toBe("")
+    expect(await manager.describeEnvironment({ local, remote: { "opencode.environment": { root: "/remote" } } })).toBe(
+      "",
+    )
+    expect(await manager.describeEnvironment({ local: { "opencode.directory": directory } })).toContain(
+      "Local instructions",
+    )
   } finally {
     await manager.close()
+    fixture.server.stop(true)
     await rm(directory, { recursive: true, force: true })
   }
 })
