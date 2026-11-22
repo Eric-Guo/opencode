@@ -110,6 +110,20 @@ export default Runtime.handler(
         const { editor, authenticateEditorTerminal } = await import("@opencode/nexus-runtime/editor")
         const current = { status: await nexus.status() }
         const workspace = () => current.status.identity?.workspace ?? current.status.workspace
+        const bindEnvironment = async (conversation: string, roots?: string[], fs?: Schema.MutableJson) => {
+          await nexus.manage({
+            payload: {
+              action: "extension.call",
+              name: "editor.environment.bind",
+              input: {
+                workspace: workspace(),
+                conversation,
+                ...(roots ? { root: roots[0], directories: roots.slice(1) } : {}),
+                ...(fs !== undefined ? { fs } : {}),
+              },
+            },
+          })
+        }
         const authentication = {
           status: async () => (current.status = await nexus.status()),
           credential: async () => {
@@ -162,11 +176,12 @@ export default Runtime.handler(
           {
             authentication,
             defaults: { mode: Option.getOrUndefined(input.mode), model: Option.getOrUndefined(input.model) },
-            open: async () =>
+            open: async (environment) =>
               Schema.decodeUnknownSync(Schema.Struct({ conversation: Schema.Struct({ public_id: Schema.String }) }))(
                 await nexus.manage({
                   payload: {
                     action: "application.open",
+                    environment,
                     model: Option.getOrUndefined(input.model),
                     key: crypto.randomUUID(),
                     runner: Option.getOrUndefined(input.runner),
@@ -216,35 +231,22 @@ export default Runtime.handler(
                 ),
               )
             },
-            setEnvironment: async (conversation, binding) => {
-              await nexus.manage({
-                payload: {
-                  action: "extension.call",
-                  name: "editor.environment.bind",
-                  input: {
-                    workspace: workspace(),
-                    conversation,
-                    ...(binding
-                      ? {
-                          root: binding.roots[0],
-                          directories: binding.roots.slice(1),
-                          fs:
-                            binding.read || binding.write
-                              ? {
-                                  url: binding.url,
-                                  token: binding.token,
-                                  session: binding.session,
-                                  read: binding.read,
-                                  write: binding.write,
-                                  client: "ACP",
-                                }
-                              : null,
-                        }
-                      : { fs: null }),
-                  },
-                },
-              })
-            },
+            bindRoots: bindEnvironment,
+            setEnvironment: (conversation, port) =>
+              bindEnvironment(
+                conversation,
+                port?.roots,
+                port && (port.read || port.write)
+                  ? {
+                      url: port.url,
+                      token: port.token,
+                      session: port.session,
+                      read: port.read,
+                      write: port.write,
+                      client: "ACP",
+                    }
+                  : null,
+              ),
             modePolicy: async (conversation) => nexus.modes({ workspace: workspace(), conversation }),
             setCodeMode: async (conversation, enabled) => {
               await nexus.modes({ workspace: workspace(), conversation, patch: { code_mode: enabled } })
