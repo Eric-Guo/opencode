@@ -12,6 +12,7 @@ const Admission = Schema.Struct({
   request: Schema.Record(Schema.String, Schema.MutableJson),
   target: Schema.optional(Schema.Struct({ workspace: Schema.String, conversation: Schema.String })),
   input: Schema.optional(Schema.String),
+  admittedAt: Schema.optional(Schema.String),
   notes: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
   body: Schema.Struct({
     kind: Schema.Literals(["direct_reply", "message"]),
@@ -141,7 +142,15 @@ export class InputAdmissions {
 
       return create(tightened.body)
     })
-    const accepted = await document.change((state) => ({ ...state!, input: receipt.input.public_id }))
+    const accepted = await document.change((state) =>
+      state!.input
+        ? state!
+        : {
+            ...state!,
+            input: receipt.input.public_id,
+            admittedAt: receipt.input.created_at,
+          },
+    )
     if (receipt.input.state !== "blocked")
       void this.submitted?.(input, receipt.input.public_id, accepted.body, receipt.replayed).catch(() => {})
     return receipt
@@ -174,8 +183,8 @@ export class InputAdmissions {
   }
 
   async modelSelection(workspace: string, conversation: string, initial?: { model: string; addressedTo?: string }) {
-    const latest = await this.latest(workspace, conversation, initial)
-    if (latest?.notes?.["nexus.addressed"] && !initial?.addressedTo) return
+    const latest = await this.latest(workspace, conversation, initial ?? {})
+    if (latest?.request.model === null) return
     if (latest?.body.model_selection)
       return latest.body.model_selection.source === "explicit" ? latest.body.model_selection : undefined
 
@@ -188,10 +197,16 @@ export class InputAdmissions {
     let selected: { at: string; value: Admission } | undefined
 
     for await (const row of this.records(workspace, conversation)) {
-      if ((selected && row.at < selected.at) || !row.value.body.model) continue
+      const at = row.value.admittedAt ?? row.at
+      if (
+        !row.value.input ||
+        (selected && at < selected.at) ||
+        (!row.value.body.model && row.value.request.model !== null)
+      )
+        continue
       const addressedTo = row.value.notes?.["nexus.addressed"] ? row.value.body.answering_user_public_id : undefined
       if (initial && initial.addressedTo !== addressedTo) continue
-      selected = row
+      selected = { at, value: row.value }
     }
     return selected?.value
   }

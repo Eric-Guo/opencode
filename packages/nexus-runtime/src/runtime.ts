@@ -1436,7 +1436,8 @@ export class NexusRuntime {
               },
             }
           : {}),
-        preparation: () => this.policy(command.workspace, command.conversation, command.preset, command.model),
+        preparation: () =>
+          this.policy(command.workspace, command.conversation, command.preset, command.model ?? undefined),
       }
 
       if (command.action === "application.prepare") {
