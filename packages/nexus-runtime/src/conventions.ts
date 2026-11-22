@@ -25,10 +25,9 @@ export function conventionsExtension(home?: string): ExtensionModule {
         const context =
           typeof environment.root === "string" ? environment : environment[api.application().identity.runner]
         if (!context || typeof context !== "object" || Array.isArray(context)) return
-        const fields = context["opencode.environment"] ??
-          context["rho.environment"] ?? {
-            root: context["opencode.directory"] ?? context.root ?? api.directory,
-          }
+        const root = context["opencode.directory"] ?? context.root
+        const fields = context["opencode.environment"] ?? context["rho.environment"] ?? (root ? { root } : undefined)
+        if (!fields) return
         const captured = Schema.decodeUnknownSync(Environment)(fields)
         const block = await conventions(captured.working_directory ?? captured.root, captured.root, home)
         const editor =
