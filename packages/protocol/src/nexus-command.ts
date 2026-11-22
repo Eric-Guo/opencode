@@ -87,7 +87,7 @@ export const NexusCommand = Schema.Union([
         directory: Schema.optional(Schema.String),
       }),
     ),
-    model: Schema.optional(Schema.String),
+    model: Schema.optional(Schema.NullOr(Schema.String)),
     preset: Schema.optional(Schema.String),
     approval: Schema.optional(Schema.Literals(["bypass", "ask", "rules"])),
     target: Schema.optional(Schema.String),
