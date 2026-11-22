@@ -69,6 +69,7 @@ export const NexusCommand = Schema.Union([
     model: Schema.optional(Schema.NonEmptyString),
     title: Schema.optional(Schema.String),
     runner: Schema.optional(Schema.NullOr(Schema.String)),
+    environment: Schema.optional(Nexus.EnvironmentRoots),
   }),
   Schema.Struct({
     action: Schema.Literals(["application.prepare", "application.submit"]),
