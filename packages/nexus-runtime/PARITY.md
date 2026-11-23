@@ -46,6 +46,29 @@ precision, so a task tied with the deliverable remains eligible, as in Rho. Capt
 retains microseconds for choosing between eligible snapshots. The [UI review](../nexus-ui/docs/rho-webui-parity.md#answer-files-and-recorded-changes)
 covers publication, byte downloads and inherited history.
 
+### Verification on localhost
+
+On November 23, 2026 the paired service was available at `localhost:3000`.
+The source runtime at `b4cf5220da3` and the working UI used a private workspace.
+A model-driven write and publication ran on the paired runner after Human approval.
+The source development terminal read its approval and metadata, published a file through
+`call_tool`, and returned the same upload ID, MIME type and byte count in text and JSON.
+Three conversation Code Mode tasks printed their markers once and retained structured
+zero, false and null. A standalone `call_tool code` without a frozen Code Mode binding
+returned `unsupported_binding` and exit status 1.
+
+A `bash` task running only `pwd` retained the run’s baseline. A later write produced
+the first patch. The restore action was missing because the checkpoint task had no patch. The reader
+now retains that task independently of its patch. The source UI restored the same
+saved run on disk. A separate two-write run had one retained baseline and restored
+both files. Seeded history on the live server exercised original runners, capture order,
+cutoffs, reverted and legacy changes, and inherited review. The temporary workspace
+returned HTTP 404 to both the Human and Agent after deletion.
+
+The reference rerun passed 143 Ruby cases. The Git timeout test twice missed its
+temporary PID file under Bundler's launcher. Running the complete checkpoint suite
+directly with Ruby passed all 33 cases, including that timeout.
+
 ## Standalone inference and follower inspection
 
 Reviewed November 23, 2026 against Cybros `4053db620` from OpenCode
