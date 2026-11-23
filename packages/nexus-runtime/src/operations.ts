@@ -557,7 +557,8 @@ export class Operations {
       if (input.action === "terminal.open") return { run: created.run.public_id, task: "terminal" }
 
       const info = await run.fetch(options)
-      return run.waitForToolResult({ ...options, patienceMs: (input.timeout ?? 30000) + 5000 }).then(
+      // An unclaimed task stays dispatched until Nexus sweeps its expired deadline.
+      return run.waitForToolResult(options).then(
         async (task) => {
           if (task.task.status !== "completed") await run.stop(true, { timeoutMs: 5000 })
           return { public_id: info.public_id, task }
