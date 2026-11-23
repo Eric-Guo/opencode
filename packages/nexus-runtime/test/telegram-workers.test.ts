@@ -262,6 +262,7 @@ test("Telegram discovers model-authored schedules through their original executi
           public_id: "schedule-" + run,
           workspace_public_id: "workspace",
           prompt: "Check",
+          wake: "auto",
           rule: { kind: "interval", every_seconds: 60 },
           status: "active",
           lock_version: 0,

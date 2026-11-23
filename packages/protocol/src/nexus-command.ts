@@ -11,7 +11,52 @@ const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("interval"), starts_at: Schema.String, every_seconds: Schema.Int }),
   Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
 ])
+const InferenceScope = { workspace: Schema.optional(Schema.NonEmptyString) }
+export const InferenceCommand = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("inference.create"),
+    ...InferenceScope,
+    key: Schema.NonEmptyString,
+    model: Schema.NonEmptyString,
+    workload: Schema.optional(
+      Schema.Literals([
+        "decision",
+        "text_generation",
+        "embedding",
+        "image_generation",
+        "speech_generation",
+        "transcription",
+      ]),
+    ),
+    input: Schema.MutableJson,
+    live: Schema.optional(Schema.Boolean),
+    configuration: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.MutableJson))),
+    reasoning_effort: Schema.optional(Schema.NullOr(Schema.String)),
+    reasoning_enabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
+    upload_public_ids: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+    billing_subject: Schema.optional(Schema.NullOr(Schema.String)),
+    fallback_models: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+    model_selection: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          source: Schema.Literals(["default", "inherited", "explicit"]),
+          model: Schema.String,
+          constraint: Schema.Literals(["any", "model", "provider", "route"]),
+          alternatives: Schema.optional(Schema.Array(Schema.String)),
+        }),
+      ),
+    ),
+  }),
+  Schema.Struct({ action: Schema.Literal("inference.list"), ...InferenceScope }),
+  Schema.Struct({
+    action: Schema.Literals(["inference.subscribe", "inference.unsubscribe"]),
+    ...InferenceScope,
+    request: Schema.NonEmptyString,
+  }),
+])
+
 export const NexusCommand = Schema.Union([
+  InferenceCommand,
   Schema.Struct({ action: Schema.Literal("workspace.list") }),
   Schema.Struct({
     action: Schema.Literal("workspace.create"),
