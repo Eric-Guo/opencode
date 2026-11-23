@@ -26,7 +26,7 @@ import {
 import { telegramConversationCommand, telegramSessionSwitch, telegramTrackConversations } from "./telegram-commands"
 import { conversationMemory } from "./memory-commands"
 import { telegramSetup } from "./telegram-setup"
-import { parseTelegramJob, telegramJob, telegramTime } from "./telegram-schedules"
+import { parseTelegramJob, recordJobExecutions, telegramJob, telegramTime } from "./telegram-schedules"
 import { telegramJobDiscovery } from "./telegram-job-discovery"
 import { telegramParticipate } from "./telegram-participation"
 import { telegramWorkers } from "./telegram-workers"
@@ -816,30 +816,16 @@ export class TelegramIngress {
         }))
       }
       for (const job of state.jobs ?? []) {
-        const executions = await this.application()
+        const schedules = this.application()
           .client.workspace(job.target.workspace)
-          .conversation(job.target.conversation)
-          .schedules.executions(job.id, {}, { signal: this.signal })
-        for (const execution of executions.items.filter((row) => row.input_public_id)) {
-          await document.change((state) => ({
-            ...state!,
-            work: state!.work.some((row) => row.input === execution.input_public_id)
-              ? state!.work
-              : [
-                  ...state!.work,
-                  {
-                    id: key(job.id, execution.input_public_id!),
-                    route: job.route,
-                    target: { workspace: job.target.workspace, conversation: execution.child_conversation_public_id },
-                    requester: job.requester,
-                    speaker: job.speaker,
-                    source: [],
-                    input: execution.input_public_id!,
-                    voice: false,
-                  },
-                ],
-          }))
-        }
+          .conversation(job.target.conversation).schedules
+        let after = job.execution_after
+
+        do {
+          const page = await schedules.executions(job.id, { after, limit: 100 }, { signal: this.signal })
+          await recordJobExecutions(document, job, page, { after })
+          after = page.next_after ?? undefined
+        } while (after)
       }
       const head = state.batches[0]
       if (head && head.ready <= now) await this.admit(id, binding, document, head, now)
@@ -1165,7 +1151,15 @@ export class TelegramIngress {
         work: state!.work.map((row) => (row.id === work.id ? { ...row, execution: snapshot.execution } : row)),
       }))
     if (snapshot?.terminal || execution.blocked_reason) {
-      if (work.worker) return
+      if (work.worker) {
+        // The parent callback can reopen a finished occurrence for delivery to an explicit destination.
+        if (work.schedule && snapshot?.terminal && !(work.canonical && work.result_route))
+          await document.change((state) => ({
+            ...state!,
+            work: state!.work.map((row) => (row.id === work.id ? { ...row, terminal: true } : row)),
+          }))
+        return
+      }
       if (work.candidate && snapshot) {
         const turn = await this.application()
           .client.workspace(work.target.workspace)
@@ -1586,16 +1580,13 @@ export class TelegramIngress {
     if (action === "status" && argument) {
       const work = state.work.find((row) => row.input === argument)
       if (!work || (!owner && work.requester !== update.requester)) return "Unknown or unavailable task ID."
+      const lines = ["Task " + work.input, "Conversation " + work.target.conversation]
+      if (work.schedule) lines.push("Scheduled job: " + work.schedule)
+      if (work.schedule && work.terminal && !work.execution) return [...lines, "Input: canceled"].join("\n")
+
       const execution = telegramExecution(this.application(), work)
       const snapshot = await execution.recover({ signal: this.signal }).then(executionSnapshot)
-      return (
-        "Task " +
-        work.input +
-        "\nConversation " +
-        work.target.conversation +
-        "\n" +
-        (snapshot?.status ?? execution.blocked_reason ?? "Waiting for materialization")
-      )
+      return [...lines, snapshot?.status ?? execution.blocked_reason ?? "Waiting for materialization"].join("\n")
     }
     if (action === "status") {
       const issues = state.deliveries.filter(
@@ -1899,6 +1890,7 @@ export class TelegramIngress {
         signal: this.signal,
         model: frozen ? (frozen.model ?? undefined) : state.model,
       })
+      if (result.executions && trackedJob) await recordJobExecutions(document, trackedJob, result.executions)
       if (result.schedule)
         await document.change((state) => ({
           ...state!,
@@ -1922,7 +1914,7 @@ export class TelegramIngress {
         ? state.work.find((row) => row.input === named)
         : reply?.input
           ? state.work.find((row) => row.input === reply.input)
-          : state.work.findLast((row) => row.requester === update.requester)
+          : state.work.findLast((row) => !row.schedule && row.requester === update.requester)
       if (!work || (!owner && work.requester !== update.requester))
         return "Unknown or unavailable task. Reply to your request or supply its task ID."
       const scope = this.application().client.workspace(work.target.workspace)
@@ -2048,7 +2040,9 @@ export class TelegramIngress {
         return "Removed the queued source message."
       }
       const choices = state.work.filter(
-        (row) => (argument || reply || update.reply || !row.terminal) && (owner || row.requester === update.requester),
+        (row) =>
+          (argument || reply || update.reply || (!row.terminal && !row.schedule)) &&
+          (owner || row.requester === update.requester),
       )
       const work = argument
         ? choices.find((row) => row.input === argument)
@@ -2060,6 +2054,8 @@ export class TelegramIngress {
               ? choices[0]
               : undefined
       if (!work) return choices.length ? "Reply to a specific request to stop its work." : "No active request to stop."
+      if (work.schedule && work.terminal && !work.execution) return "This task's input is already canceled."
+
       const chat = this.application().client.workspace(work.target.workspace).conversation(work.target.conversation)
       const execution = telegramExecution(this.application(), work)
       const snapshot = await execution.recover({ signal: this.signal }).then(executionSnapshot)

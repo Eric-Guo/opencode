@@ -49,6 +49,7 @@ test("adaptations select by lane-independent reference and apply boot aliases wi
     })
     expect(() => pack.configuration(["nexus.conversation.spawn"], [])).toThrow("anchor moved")
     const off = await Adaptations.load({ ...defaultSettings, adaptations: "off" }, directory)
+    expect(off.facts("lane/other")).toMatchObject({ selection: "off", matched: null })
     expect(off.configuration(["nexus.conversation.spawn"], [])).toEqual({
       kernel_tools: ["nexus.conversation.spawn"],
       tool_definitions: [],
@@ -67,10 +68,21 @@ test("local adaptation rows override bundled rows, prioritize own patterns, and 
     await mkdir(join(directory, "adaptations"))
     await writeFile(
       join(directory, "adaptations", "custom.yml"),
-      "format: 1\nrow: custom\nmodels: [gpt-*]\ntool_style: [nexus]\nlead_hints: [{id: plan, text: Custom hint}]\nsummarizer_prompt: Custom summary\n",
+      "format: 1\nrow: custom\nmodels: [gpt-*, gpt-6.1-sol]\ntool_style: [nexus]\nlead_hints: [{id: plan, text: Custom hint}]\nsummarizer_prompt: Custom summary\n",
     )
     const pack = await Adaptations.load(defaultSettings, directory, "lane/gpt-6.1-sol")
-    expect(pack.facts()).toMatchObject({ row: "custom", source: "local" })
+    expect(pack.facts()).toMatchObject({ row: "custom", source: "local", selection: "exact", matched: "gpt-6.1-sol" })
+    expect(pack.facts("lane/gpt-future")).toMatchObject({ selection: "wildcard", matched: "gpt-*" })
+    expect(pack.facts("lane/unknown")).toMatchObject({ selection: "fallback" })
+    const pinned = await Adaptations.load({ ...defaultSettings, adaptations: "custom" }, directory)
+    expect(pinned.facts("lane/other")).toMatchObject({ selection: "pinned", matched: null })
+    expect(pack.facts()).toMatchObject({
+      models: ["gpt-*", "gpt-6.1-sol"],
+      tool_style: ["nexus"],
+      tool_descriptions: 0,
+      lead_hints: ["plan"],
+      summarizer: expect.stringMatching(/^[a-f0-9]{12} 14 B \(row\)$/),
+    })
     expect(pack.hints()).toBe("Custom hint")
     expect(pack.summarizer()).toBe("Custom summary")
     const clash = join(directory, "adaptations", "same.yml")
