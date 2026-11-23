@@ -91,11 +91,21 @@ test("bounded concurrency is two and a disconnected submitter does not own the t
 
 test("cancel queued and running tasks targets only the named task", async () => {
   const { client } = await fixture(1)
-  await client.request({ op: "submit", text: "a", durationMs: 300 }, "cancel-running")
-  await client.request({ op: "submit", text: "b", durationMs: 300 }, "cancel-queued")
+
+  // These tasks outlive the test timeout, so cancellation determines when they finish.
+  const durationMs = 60_000
+  await client.request({ op: "submit", text: "a", durationMs }, "cancel-running")
+  await client.request({ op: "submit", text: "b", durationMs }, "cancel-queued")
   await client.request({ op: "submit", text: "c", durationMs: 10 }, "keep-task")
-  expect((await client.request({ op: "cancel", taskId: "cancel-queued" })).task?.state).toBe("cancelled")
-  expect((await client.request({ op: "cancel", taskId: "cancel-running" })).task?.state).toBe("cancelled")
+
+  expect((await client.request({ op: "cancel", taskId: "cancel-queued" })).task).toMatchObject({
+    state: "cancelled",
+    starts: 0,
+  })
+  expect((await client.request({ op: "cancel", taskId: "cancel-running" })).task).toMatchObject({
+    state: "cancelled",
+    starts: 1,
+  })
   expect((await terminal(client, "keep-task"))?.state).toBe("completed")
   expect((await client.request({ op: "cancel", taskId: "keep-task" })).task?.state).toBe("completed")
   expect((await client.request({ op: "cancel", taskId: "unknown" })).error).toBe("task_not_found")
