@@ -7,7 +7,7 @@ import { TelegramUpdate } from "../src/telegram-update"
 import { TelegramIngress } from "../src/telegram-ingress"
 import { TelegramState, telegramState } from "../src/telegram-state"
 import { telegramSetup } from "../src/telegram-setup"
-import { telegramRule, telegramTime } from "../src/telegram-schedules"
+import { scheduleRule, scheduleTime } from "../src/jobs"
 import { telegramChunks } from "../src/telegram-api"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
@@ -1184,24 +1184,24 @@ test("Telegram Connection setup preserves omitted secrets and validates before s
 })
 
 test("Telegram scheduling resolves the saved clock and requires explicit absolute-time offsets", () => {
-  expect(telegramTime("in 20m", now)).toBe(new Date(now + 1200000).toISOString())
-  expect(telegramRule("every 1h Check the build", now)).toEqual({
+  expect(scheduleTime("in 20m", now)).toBe(new Date(now + 1200000).toISOString())
+  expect(scheduleRule("every 1h Check the build", now)).toEqual({
     rule: { kind: "interval", every_seconds: 3600, starts_at: new Date(now + 3600000).toISOString() },
     prompt: "Check the build",
   })
-  expect(telegramRule("daily 09:00 Australia/Perth Morning report", now)).toEqual({
+  expect(scheduleRule("daily 09:00 Australia/Perth Morning report", now)).toEqual({
     rule: { kind: "daily", local_time: "09:00", time_zone: "Australia/Perth" },
     prompt: "Morning report",
   })
-  expect(() => telegramTime("at 2026-11-15T09:00:00", now)).toThrow("UTC offset")
-  expect(() => telegramRule("every 0s Impossible", now)).toThrow("positive")
+  expect(() => scheduleTime("at 2026-11-15T09:00:00", now)).toThrow("UTC offset")
+  expect(() => scheduleRule("every 0s Impossible", now)).toThrow("positive")
 })
 
 test("Telegram time arguments match the reference grammar without discarding trailing text", () => {
-  expect(telegramTime("in 0s", now)).toBe(new Date(now).toISOString())
-  expect(telegramTime("at 2026-11-17T09:30:00+0800", now)).toBe("2026-11-17T01:30:00.000Z")
+  expect(scheduleTime("in 0s", now)).toBe(new Date(now).toISOString())
+  expect(scheduleTime("at 2026-11-17T09:30:00+0800", now)).toBe("2026-11-17T01:30:00.000Z")
   for (const text of ["in 1m ignored", "now ignored", "at 2026-11-17T09:30Z", "at 2026-11-17T09:30:00Z ignored"])
-    expect(() => telegramTime(text, now)).toThrow()
+    expect(() => scheduleTime(text, now)).toThrow()
 })
 
 test("Telegram scheduled prompts retain newlines and spacing through ingress", async () => {

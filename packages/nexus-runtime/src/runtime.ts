@@ -12,6 +12,7 @@ import {
   APIKeyCredentials,
   decodeCredentialDocument,
   type AgentConfigurationInput,
+  type Conversation,
   type CredentialStore,
   type JsonObject,
   type RequestOptions,
@@ -973,10 +974,10 @@ export class NexusRuntime {
     return { ...defaults, available: true, code_mode_available: this.codeModeEnabled() }
   }
 
-  async policy(workspace: string, conversation: string, preset?: string, model?: string) {
+  async policy(workspace: string, conversation: string, preset?: string, model?: string, capturedChat?: Conversation) {
     const active = this.connection
     if (!active || !this.settings) throw new Error("The selected workspace is unavailable.")
-    const chat = await active.member.workspace(workspace).conversation(conversation).fetch()
+    const chat = capturedChat ?? (await active.member.workspace(workspace).conversation(conversation).fetch())
     if (
       chat.answering_user_public_id !== active.identity.agent ||
       (chat.side && !(await active.application.sides.read(workspace, conversation))) ||
@@ -1026,7 +1027,9 @@ export class NexusRuntime {
     }
     const assembly = await active.member.tools.assemble({
       default_runner_executor_public_id: runner ?? null,
-      configuration: prepared.agent_configuration,
+      ...(capturedChat?.agent_configuration_present
+        ? { conversation_public_id: conversation }
+        : { configuration: prepared.agent_configuration }),
     })
     const selected = assembly.tool_definitions.flatMap((row) => {
       if (!row || typeof row !== "object" || Array.isArray(row)) return []
@@ -1462,22 +1465,46 @@ export class NexusRuntime {
     if (command.action === "memory.collections") return workspace.memoryCollections.list()
     if ("conversation" in command) {
       const chat = workspace.conversation(command.conversation)
+      const schedules = chat.schedules
+      if (command.action === "schedule.read") return schedules.fetch(command.id)
+      if (command.action === "schedule.executions") return schedules.executions(command.id, { after: command.after })
+
       const info = await chat.fetch()
       if (info.side || info.archived_at || info.answering_user_public_id !== active.identity.agent)
         throw new Error("Unknown active agent conversation.")
-      const schedules = chat.schedules
+      if (command.action === "schedule.defaults") {
+        const defaults = await active.application.prepare(undefined, {
+          workspace: selected,
+          conversation: command.conversation,
+        })
+        const selection = await active.application.selectModel(selected, info, undefined, defaults.model)
+        const mode = defaults.agent_configuration.approval_mode
+
+        return { model: selection?.model ?? null, approval: mode === "rules" || mode === "bypass" ? mode : "ask" }
+      }
       if (command.action === "schedule.create") {
-        const policy = await this.policy(selected, command.conversation)
+        const policy = await this.policy(selected, command.conversation, undefined, undefined, info)
+        const selection =
+          info.agent_configuration_present && !command.model
+            ? undefined
+            : await active.application.selectModel(selected, info, command.model, policy.model)
+        const requested = command.tool_names
         return (
           await schedules.create(
             {
               prompt: command.prompt,
               name: command.name,
               rule: command.rule,
-              ...(command.model ? { model: { model: command.model } } : {}),
+              model: scheduleModel(command, selection?.model),
+              model_selection: selection,
+              fallback_models: command.fallback_models
+                ? [...command.fallback_models]
+                : info.agent_configuration_present
+                  ? undefined
+                  : policy.fallback_models,
               answering_user_public_id: active.identity.agent,
               approval_mode: command.approval ?? "ask",
-              tool_names: policy.tools,
+              tool_names: requested ? policy.tools.filter((name) => requested.includes(name)) : policy.tools,
               executor_contexts: policy.executor_contexts,
             },
             { idempotencyKey: command.key },
@@ -1485,21 +1512,28 @@ export class NexusRuntime {
         ).schedule
       }
       if (!("id" in command)) throw new Error("Unknown conversation command.")
-      if (command.action === "schedule.update")
+      if (command.action === "schedule.update") {
+        const requested = command.tool_names
+        const tools =
+          requested &&
+          (await this.policy(selected, command.conversation, undefined, undefined, info)).tools.filter((name) =>
+            requested.includes(name),
+          )
         return schedules.update(command.id, {
           expected_lock_version: command.version,
           name: command.name,
-          ...(command.model ? { model: { model: command.model } } : {}),
+          model: scheduleModel(command, command.model),
+          fallback_models: command.fallback_models && [...command.fallback_models],
+          tool_names: tools,
           approval_mode: command.approval,
           rule: command.rule,
           prompt: command.prompt,
         })
-      if (command.action === "schedule.read") return schedules.fetch(command.id)
+      }
       if (command.action === "schedule.pause") return schedules.pause(command.id)
       if (command.action === "schedule.resume") return schedules.resume(command.id)
       if (command.action === "schedule.cancel") return schedules.cancel(command.id)
       if (command.action === "schedule.run") return schedules.run(command.id)
-      if (command.action === "schedule.executions") return schedules.executions(command.id, { after: command.after })
       throw new Error("Unknown schedule command.")
     }
     const collections = workspace.memoryCollections
@@ -1699,4 +1733,12 @@ export class NexusRuntime {
     this.extensionManager = undefined
     this.executor = undefined
   }
+}
+
+function scheduleModel(
+  command: Extract<typeof NexusCommand.Type, { action: "schedule.create" | "schedule.update" }>,
+  model: string | undefined,
+) {
+  if (model || command.reasoning_effort !== undefined || command.reasoning_enabled !== undefined)
+    return { model, reasoning_effort: command.reasoning_effort, reasoning_enabled: command.reasoning_enabled }
 }

@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`7a8243168e166cab52cfce710008723e936d6603`. Paths in the first column are relative
+`79ff4f2da20ae80a7513f1198d7002a84e72a396`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,9 +13,46 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The latest review covers [standalone tool settlement](#standalone-tool-settlement).
+tests below. The latest review covers [scheduled jobs and operator web fetch](#scheduled-jobs-and-operator-web-fetch).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Scheduled jobs and operator web fetch
+
+Reviewed November 24, 2026 against Cybros `7a8243168` from OpenCode `dfe362962c5`.
+The [reference anchors](#reference-contract-anchors) identify the TypeScript implementation
+and local tests for each of the eleven executable packages.
+
+- `rho` Ops and the installed CLI share conversation job behavior with
+  `src/runtime.ts` and `src/jobs.ts`. An ordinary job captures the selected model,
+  its explicit or default routing intent, fallbacks, available tools and runner
+  contexts. A conversation with a captured declaration keeps its model controls
+  unless the caller overrides them. Updates send the supplied fields and lock version.
+  The SDK supports clearing a name and disabling reasoning independently.
+- `rho-ingress-telegram` uses the same schedule parser through
+  `src/telegram-ingress.ts`. The Bot path retains its own author, captured model
+  selection, requester, delivery target and retry key.
+- `rho-web-tools` has an offline operator entry point in `src/web.ts` and the
+  production CLI. It uses the configured Web reader and the same fetch and
+  rendering code as the runner. A local HTTP peer served 120,000 bytes of text
+  and a six-byte binary verbatim. A 404 produced zero stdout bytes and exit 1.
+
+The development CLI created, edited, paused, resumed, ran and canceled a job in a
+private workspace on `localhost:3000`. The stored schedule retained the opening
+model pin, runner context, empty tool and fallback lists, and explicit reasoning
+disablement after a prompt-only edit. Nexus reported the child execution as completed.
+The scratch workspace returned HTTP 404 after deletion. Its Agent and keys were retired
+and the elected service reported ready on its original pairing.
+The [WebUI review](../nexus-ui/docs/rho-webui-parity.md#scheduled-job-drafts-and-detail-links)
+covers the Human view of the same workflow.
+
+Runtime conformance passed 453 cases across 78 files with Chromium, PTY and WebRTC.
+The Linux-only filename case skipped on macOS. The selected Ruby reference run covered
+108 cases across all eleven owners. In Cybros `79ff4f2da`, the Rho Ops job and execution fixtures include
+the required `wake: "auto"` field. Running `bundle exec ruby -Itest test/extensions/ops_schedules_test.rb`
+from `agents/rho/rho` passed all four tests and 58 assertions using those fixtures.
+The TypeScript SDK check, regenerated client, CLI and Server Nexus tests, runtime build
+and pack, and root `bun run check` passed.
 
 ## Standalone tool settlement
 
