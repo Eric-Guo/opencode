@@ -34,6 +34,10 @@ export class TurnLifecycle {
     return [...this.hosts.values()].map((host) => ({ workspace: host.workspace, conversation: host.conversation }))
   }
 
+  followsRun(workspace: string, conversation: string, run: string) {
+    return this.followed.has(workspace + ":" + conversation + ":" + run)
+  }
+
   adopt(workspace: string, conversation: string) {
     const key = workspace + ":" + conversation
     this.retired.delete(key)
