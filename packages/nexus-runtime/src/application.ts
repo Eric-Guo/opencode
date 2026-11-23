@@ -271,6 +271,35 @@ export class NexusApplication {
     }
   }
 
+  async selectModel(
+    workspace: string,
+    conversation: Conversation,
+    supplied: string | null | undefined,
+    fallback: string | undefined,
+  ) {
+    const initial = conversation.metadata["opencode.initial_model"]
+    const prior =
+      supplied === undefined && !conversation.side
+        ? await this.admissions.modelSelection(
+            workspace,
+            conversation.public_id,
+            conversation.answering_user_public_id === this.identity.agent && typeof initial === "string"
+              ? { model: initial }
+              : undefined,
+          )
+        : undefined
+    if (prior) return prior
+
+    const model = supplied ?? fallback
+    if (model)
+      return {
+        source: supplied ? ("explicit" as const) : ("default" as const),
+        constraint: supplied ? ("route" as const) : ("any" as const),
+        model,
+        alternatives: [],
+      }
+  }
+
   private async settledModel(workspace: string, conversation: string): Promise<string | undefined> {
     const scope = this.member.workspace(workspace)
     let before: number | undefined
@@ -582,11 +611,8 @@ export class NexusApplication {
           : this.policy
             ? await this.policy(input.workspace, input.conversation, input.preset)
             : await this.prepare(input.preset, { workspace: input.workspace, conversation: input.conversation })))
-    const previousSelection =
-      !side && input.model === undefined
-        ? await this.admissions.modelSelection(input.workspace, input.conversation, initial)
-        : undefined
-    const model = input.model ?? previousSelection?.model ?? side?.model ?? prepared.model
+    const selection = await this.selectModel(input.workspace, conversation, input.model, side?.model ?? prepared.model)
+    const model = selection?.model
 
     if (!model && !inherited) throw new Error("Select a model before submitting input.")
 
@@ -734,12 +760,7 @@ export class NexusApplication {
         ? {
             agent_configuration: prepared.agent_configuration,
             model: { model: model! },
-            model_selection: previousSelection ?? {
-              source: input.model ? ("explicit" as const) : ("default" as const),
-              model: model!,
-              constraint: input.model ? ("route" as const) : ("any" as const),
-              alternatives: [],
-            },
+            model_selection: selection!,
             fallback_models: prepared.fallback_models,
           }
         : input.model
