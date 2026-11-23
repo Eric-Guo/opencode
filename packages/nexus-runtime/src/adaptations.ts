@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { Schema } from "effect"
@@ -102,45 +103,71 @@ export class Adaptations {
     return result
   }
 
-  choice(model = this.model) {
-    if (this.settings.adaptations === "off") return this.rows.find((row) => row.row === "default")!
-    if (this.settings.adaptations !== "auto") return this.rows.find((row) => row.row === this.settings.adaptations)!
-    if (!model) return this.rows.find((row) => row.row === "default")!
-    if (!model.includes("/")) throw new Error("Model reference requires a lane segment: " + model)
-    const reference = model.slice(model.indexOf("/") + 1)
-    const ranked = this.rows
-      .flatMap((row) => {
-        const rank = Math.max(
-          -1,
-          ...row.models.map((pattern) =>
-            pattern.endsWith("*")
-              ? reference.startsWith(pattern.slice(0, -1))
-                ? pattern.length - 1
-                : -1
-              : pattern === reference
-                ? pattern.length + 1
-                : -1,
-          ),
-        )
-        const own = row.source === "local" && !data.rows.some((entry) => entry.row === row.row)
-        return rank < 0 ? [] : [{ row, rank, own }]
-      })
-      .toSorted(
+  private resolve(model = this.model) {
+    const mode = this.settings.adaptations
+    const fallback = this.rows.find((row) => row.row === "default")!
+    if (mode === "off") return { row: fallback, matched: null, selection: "off" }
+    if (mode === "auto" && model && !model.includes("/"))
+      throw new Error("Model reference requires a lane segment: " + model)
+
+    const reference = model?.includes("/") ? model.slice(model.indexOf("/") + 1) : undefined
+    const rows = mode === "auto" ? this.rows : this.rows.filter((row) => row.row === mode)
+    const ranked = rows
+      .flatMap((row) =>
+        row.models
+          .filter((pattern) =>
+            pattern.endsWith("*") ? reference?.startsWith(pattern.slice(0, -1)) : reference === pattern,
+          )
+          .map((pattern) => ({
+            row,
+            pattern,
+            own: row.source === "local" && !data.rows.some((entry) => entry.row === row.row),
+            rank: pattern.endsWith("*") ? pattern.length - 1 : pattern.length + 1,
+          })),
+      )
+      .sort(
         (a, b) =>
           Number(b.own) - Number(a.own) ||
           b.rank - a.rank ||
           Number(b.row.source === "local") - Number(a.row.source === "local"),
       )
-    return ranked[0]?.row ?? this.rows.find((row) => row.row === "default")!
+    const match = ranked[0]
+    if (mode !== "auto") return { row: rows[0], matched: match?.pattern ?? null, selection: "pinned" }
+    if (!match) return { row: fallback, matched: null, selection: "fallback" }
+
+    return { row: match.row, matched: match.pattern, selection: match.pattern.endsWith("*") ? "wildcard" : "exact" }
+  }
+
+  choice(model = this.model) {
+    return this.resolve(model).row
   }
 
   facts(model = this.model) {
-    const row = this.choice(model)
+    const { row, matched, selection } = this.resolve(model)
+    const boot = this.choice()
     return {
-      row: this.settings.adaptations === "off" ? "off" : row.row,
-      source: this.settings.adaptations === "off" ? "off" : row.source,
+      row: selection === "off" ? "off" : row.row,
+      source: selection === "off" ? "off" : row.source,
+      selection,
+      matched,
+      ...(selection !== "off" && {
+        models: [...row.models],
+        tool_style: [...row.tool_style],
+        tool_descriptions: row.tool_descriptions?.length ?? 0,
+        recuts: this.aliases(row).flatMap((alias) =>
+          alias.recut ? [alias.name + " ← " + alias.recut.anchor.split("\n")[0]] : [],
+        ),
+        summarizer:
+          row.summarizer_prompt == null
+            ? "kernel default"
+            : createHash("sha256").update(row.summarizer_prompt).digest("hex").slice(0, 12) +
+              " " +
+              Buffer.byteLength(row.summarizer_prompt) +
+              " B (row)",
+        lead_hints: (row.lead_hints ?? []).map((hint) => hint.id),
+      }),
       ...(row.path ? { path: row.path } : {}),
-      ...(row.row !== this.choice().row ? { boot_row: this.choice().row } : {}),
+      ...(row.row !== boot.row ? { boot_row: boot.row } : {}),
     }
   }
 
