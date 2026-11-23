@@ -5693,9 +5693,14 @@ export type ExperimentalNexusManageInput = {
         readonly after?: string | null
       }
     | { readonly action: "memory.collections"; readonly workspace?: string | null }
+    | { readonly action: "schedule.defaults"; readonly workspace?: string | null; readonly conversation: string }
     | {
         readonly action: "schedule.create"
         readonly model?: string | null
+        readonly reasoning_effort?: string | null
+        readonly reasoning_enabled?: boolean | null
+        readonly fallback_models?: ReadonlyArray<string> | null
+        readonly tool_names?: ReadonlyArray<string> | null
         readonly workspace?: string | null
         readonly approval?: "ask" | "rules" | "bypass" | null
         readonly conversation: string
@@ -5723,11 +5728,15 @@ export type ExperimentalNexusManageInput = {
     | {
         readonly action: "schedule.update"
         readonly model?: string | null
+        readonly reasoning_effort?: string | null
+        readonly reasoning_enabled?: boolean | null
+        readonly fallback_models?: ReadonlyArray<string> | null
+        readonly tool_names?: ReadonlyArray<string> | null
         readonly workspace?: string | null
         readonly conversation: string
         readonly id: string
         readonly version: number
-        readonly name?: string | null
+        readonly name?: string | null | null
         readonly approval?: "ask" | "rules" | "bypass" | null
         readonly prompt?: string | null
         readonly rule?:
