@@ -57,7 +57,7 @@ export async function recordedChanges(
   const runners = new Set(effects.runners.map((row) => row.runner_executor_public_id))
   const cutoff = data.tasks.find((task) => task.key === data.deliverable_task_key)?.completed_at ?? data.completed_at
   const snapshots = new Map<string, { runner: string; snapshot: typeof Snapshot.Type }>()
-  const steps = new Map<string, Review[]>()
+  const steps = new Map<string, { patches: Review[]; restoreTasks: string[] }>()
 
   for (const task of data.tasks) {
     const runner = task.target?.executor_public_id
@@ -80,18 +80,24 @@ export async function recordedChanges(
       change._tag === "Some"
         ? { root: change.value.root, changes: [change.value.change], truncated: false }
         : Option.getOrUndefined(Schema.decodeUnknownOption(Tree)(detail.structured_content))
+    // A task can capture the run baseline before any task changes a file.
+    const restorable = runner === localRunner && Schema.is(RestoreCheckpoint)(detail.metadata?.checkpoint)
+    const root = tree?.root ?? Option.getOrUndefined(capture)?.root
+    if (root === undefined || (!restorable && !tree?.changes.length)) continue
+
+    const key = JSON.stringify([runner, root])
+    const group = steps.get(key) ?? { patches: [], restoreTasks: [] }
+    steps.set(key, group)
+    if (restorable) group.restoreTasks.push(task.key)
     if (!tree?.changes.length) continue
 
-    const key = JSON.stringify([runner, tree.root])
-    const group = steps.get(key) ?? []
-    group.push({
+    group.patches.push({
       runner,
       root: tree.root,
       base: task.key,
       run: data.public_id,
       truncated: tree.truncated,
-      restoreTasks:
-        runner === localRunner && Schema.is(RestoreCheckpoint)(detail.metadata?.checkpoint) ? [task.key] : [],
+      restoreTasks: restorable ? [task.key] : [],
       files: tree.changes.map((file) => ({
         state: "text",
         path: file.file,
@@ -101,12 +107,11 @@ export async function recordedChanges(
         deletions: file.deletions,
       })),
     })
-    steps.set(key, group)
   }
 
   const reviews: Review[] = []
   for (const [key, { runner, snapshot }] of snapshots) {
-    const local = steps.get(key) ?? []
+    const local = steps.get(key)
     steps.delete(key)
     if (!snapshot.files.length && !snapshot.truncated) continue
     reviews.push({
@@ -116,12 +121,12 @@ export async function recordedChanges(
       base: snapshot.base,
       root: snapshot.root,
       truncated: snapshot.truncated,
-      restoreTasks: local.flatMap((step) => step.restoreTasks),
+      restoreTasks: local?.restoreTasks ?? [],
       files: snapshot.files.map((file) => ({ ...file, status: status[file.status] })),
     })
   }
   // Older OpenCode results can carry a per-task patch without a cumulative capture.
-  return [...reviews, ...Array.from(steps.values()).flat()]
+  return [...reviews, ...Array.from(steps.values()).flatMap((group) => group.patches)]
 }
 
 function compareTime(a: string, b: string) {
