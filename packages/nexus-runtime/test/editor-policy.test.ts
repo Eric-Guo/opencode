@@ -58,6 +58,70 @@ test.each(["session/load", "session/resume"] as const)(
   },
 )
 
+test.each(["session/new", "session/load", "session/resume"] as const)(
+  "ACP %s mounts editor MCP for its own agent on a remote runner",
+  async (method) => {
+    const roots: string[][] = []
+    const attached: string[] = []
+    const detached: string[] = []
+    const servers = [{ name: "editor", type: "http" as const, url: "http://localhost:4000", headers: [] }]
+    {
+      await using fixture = await editorFixture(
+        (request) => {
+          if (new URL(request.url).pathname.endsWith("/conversations/conversation"))
+            return Response.json({
+              conversation: conversationFixture({
+                answering_user_public_id: "main",
+                default_runner: { executor_public_id: "remote", presence: "connected" },
+              }),
+            })
+        },
+        {
+          open: async () => "conversation",
+          setEnvironment: async () => {
+            throw new Error("Remote files belong to the runner")
+          },
+          bindRoots: async (_id, paths) => {
+            roots.push(paths)
+          },
+          attachMcp: async (input) => {
+            expect(input.servers).toEqual(servers)
+            attached.push(input.conversation)
+            return { tools: ["mcp__editor__read"], issues: [] }
+          },
+          detachMcp: async (id) => {
+            detached.push(id)
+          },
+        },
+      )
+      const params = { cwd: "/remote/project", additionalDirectories: ["/remote/library"], mcpServers: servers }
+      const result =
+        method === "session/new"
+          ? await fixture.peer.agent.request(method, params)
+          : await fixture.peer.agent.request(method, { sessionId: "conversation", ...params })
+
+      expect(result).not.toHaveProperty("_meta")
+      expect(attached).toEqual(["conversation"])
+      expect(roots).toEqual([["/remote/project", "/remote/library"]])
+      if (method !== "session/resume") await fixture.peer.agent.request("session/close", { sessionId: "conversation" })
+    }
+    expect(detached).toEqual(["conversation"])
+  },
+)
+
+test("ACP reports an unavailable MCP registrar while keeping the session open", async () => {
+  await using fixture = await editorFixture(() => undefined)
+  const params = {
+    sessionId: "conversation",
+    cwd: fixture.directory,
+    mcpServers: [{ name: "peer", command: "peer", args: [], env: [] }],
+  }
+  expect(await fixture.peer.agent.request("session/resume", params)).toMatchObject({
+    _meta: { "opencode.mcp.issues": [expect.stringContaining("cannot serve editor MCP tools")] },
+  })
+  await fixture.peer.agent.request("session/close", { sessionId: "conversation" })
+})
+
 test("ACP opens on the selected runner with the editor roots and rejects invalid paths before opening", async () => {
   const opens: unknown[] = []
   await using fixture = await editorFixture(
