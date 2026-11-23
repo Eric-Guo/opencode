@@ -567,6 +567,17 @@ test.each([
       if ("apiKey" in fixture) {
         expect(
           await runtime.manage({
+            action: "application.operation",
+            operation: { action: "adaptations", model: "provider/summarizer" },
+          }),
+        ).toMatchObject({
+          model: "provider/summarizer",
+          facts: null,
+          catalog_error: expect.any(String),
+          adaptations: { row: "summary", source: "local", selection: "exact", matched: "summarizer" },
+        })
+        expect(
+          await runtime.manage({
             action: "extension.call",
             name: "editor.mcp.attach",
             input: {
