@@ -31,6 +31,8 @@ function fixture(group = true) {
     held: undefined as JsonObject | undefined,
     formatting: false,
     loseSchedule: false,
+    loseExecutionPage: false,
+    occurrences: [] as JsonObject[],
     loseResume: false,
     changedVariant: false,
     inference: 0,
@@ -239,8 +241,24 @@ function fixture(group = true) {
           lock_version: 1,
         },
       })
-    if (path.endsWith("/schedules/job/executions"))
-      return Response.json({ executions: [], pagination: { next_after: null } })
+    if (path.endsWith("/schedules/job/executions")) {
+      const start = Number(url.searchParams.get("after"))
+      const limit = Number(url.searchParams.get("limit") ?? 25)
+      windows.push({ path, query: Object.fromEntries(url.searchParams) })
+      if (start === 100 && state.loseExecutionPage) {
+        state.loseExecutionPage = false
+        return Response.json({ error: { code: "unavailable" } }, { status: 503 })
+      }
+      const items = state.occurrences.slice(start, start + limit)
+      const end = start + items.length
+      return Response.json({
+        executions: items,
+        pagination: {
+          next_after: end < state.occurrences.length ? String(end) : null,
+          last_cursor: end ? String(end) : null,
+        },
+      })
+    }
     if (path.endsWith("/workspaces"))
       return Response.json({
         workspaces: [
@@ -510,6 +528,12 @@ function fixture(group = true) {
       return Response.json({ turn: { public_id: "turn", inherited: false }, variant: regenerated })
     if (path.endsWith("/runs/candidate-run"))
       return Response.json({ run: { public_id: "candidate-run", status: "running" } })
+    if (path.endsWith("/scheduled-child/turns/turn/variants"))
+      return Response.json({
+        turn: { public_id: "turn", inherited: false },
+        variants: [{ public_id: "child-variant", source: "original", status: "running", run_public_id: "child-run" }],
+      })
+    if (path.endsWith("/runs/child-run")) return Response.json({ run: { public_id: "child-run", status: "running" } })
     if (path.endsWith("/turns/turn/variants"))
       return Response.json({
         turn: { public_id: "turn", inherited: false },
@@ -1373,6 +1397,88 @@ test("Telegram explicitly refused HTML falls back to the captured visible chunk"
   await peer.open().tick(connection, now + 6000)
   expect(peer.saved().deliveries).toHaveLength(0)
   expect(peer.saved().messages?.[0]).toMatchObject({ kind: "answer", input: peer.inputs[0].key, text: "" })
+})
+
+test("Telegram resumes occurrence polling after a lost page and keeps pending occurrences until settled", async () => {
+  using peer = fixture()
+  await peer.open().ingest(connection, message(1, "/job create every 1m Report"), now)
+  peer.state.occurrences = Array.from({ length: 101 }, (_, i) => ({
+    child_conversation_public_id: "scheduled-child",
+    input_public_id: "input-" + i,
+    turn_public_id: null,
+    variant_public_id: null,
+    run_public_id: null,
+    status: i === 100 ? "queued" : "canceled",
+    scheduled_for: new Date(now).toISOString(),
+    created_at: new Date(now).toISOString(),
+  }))
+  peer.state.loseExecutionPage = true
+  await expect(peer.open().tick(connection, now + 1000)).rejects.toThrow()
+  expect(peer.saved().jobs?.[0].execution_after).toBe("100")
+  expect(peer.saved().work).toHaveLength(100)
+  expect(peer.saved().work[0].terminal).toBe(true)
+  const restarted = peer.open()
+  await restarted.ingest(connection, message(2, "/status input-0"), now + 1100)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Scheduled job: job\nInput: canceled")
+  await restarted.ingest(connection, message(3, "/stop input-0"), now + 1200)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("already canceled")
+  await peer.open().tick(connection, now + 2000)
+  expect(peer.saved().work).toHaveLength(101)
+  expect(peer.saved().jobs?.[0].execution_after).toBe("100")
+  Object.assign(peer.state.occurrences[100], {
+    status: "running",
+    turn_public_id: "turn",
+    variant_public_id: "child-variant",
+    run_public_id: "child-run",
+  })
+  await peer.open().tick(connection, now + 3000)
+  expect(peer.saved().jobs?.[0].execution_after).toBe("101")
+  expect(peer.saved().work.at(-1)).toMatchObject({ input: "input-100", execution: { run_public_id: "child-run" } })
+  expect(
+    peer.windows.filter((row) => row.path.endsWith("/executions")).map((row) => row.query.after ?? "first"),
+  ).toEqual(["first", "100", "100", "100"])
+})
+
+test("Telegram history binds task controls to the occurrence before the next poll and leaves Stop on main work", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  await ingress.ingest(
+    connection,
+    message(1, "@FixtureBot work", { entities: [{ type: "mention", offset: 0, length: 11 }] }),
+    now,
+  )
+  await ingress.tick(connection, now + 2000)
+  await ingress.ingest(connection, message(2, "/job create every 1m Report"), now + 3000)
+  peer.state.running = true
+  peer.state.occurrences = Array.from({ length: 26 }, (_, i) => ({
+    child_conversation_public_id: "scheduled-child",
+    input_public_id: "task-" + i,
+    turn_public_id: "turn",
+    variant_public_id: "child-variant",
+    run_public_id: "child-run",
+    status: "running",
+    scheduled_for: new Date(now).toISOString(),
+    created_at: new Date(now).toISOString(),
+  }))
+  await ingress.ingest(connection, message(3, "/job history job"), now + 4000)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("More: /job history job 25")
+  await ingress.ingest(connection, message(4, "/job history job 25"), now + 5000)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Task: task-25 · running · " + new Date(now).toISOString())
+  expect(peer.saved().jobs?.[0].execution_after).toBeUndefined()
+  const next = peer.open()
+  await next.ingest(connection, message(5, "/stop task-25", { from: { id: 30, is_bot: false } }), now + 6000)
+  expect(peer.requests.some((path) => path.endsWith("/stop"))).toBe(false)
+  await next.ingest(connection, message(6, "/steer task-25 include totals"), now + 7000)
+  expect(peer.inputs.at(-1)).toMatchObject({
+    conversation: "scheduled-child",
+    body: { expected_steering_run_public_id: "child-run" },
+  })
+  await next.ingest(connection, message(7, "/stop task-25"), now + 8000)
+  await next.ingest(connection, message(8, "/stop"), now + 9000)
+  expect(peer.requests.filter((path) => path.endsWith("/stop"))).toEqual([
+    expect.stringContaining("/child-run/stop"),
+    expect.stringContaining("/run/stop"),
+  ])
 })
 
 test("Telegram freezes scheduled job creation across a lost response and allows only its requester or owner to manage it", async () => {

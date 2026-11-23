@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`48ff47738cf6edacd076caf261a8ff1f02ea636f`. Paths in the first column are relative
+`4053db620ff51b4c9e910b8a6793f5cd4473958f`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,10 +13,38 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The [latest verification](#editor-mcp-and-workspace-run-listing)
-covers editor MCP placement, workspace run listing and new-conversation defaults.
+tests below. The latest review covers [scheduled executions and adaptation inspection](#scheduled-executions-and-adaptation-inspection).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Scheduled executions and adaptation inspection
+
+Reviewed November 23, 2026 from OpenCode `26db46cf45b` against Cybros
+`4053db620`. Since the prior review, the Rho changes are Ruby lockfile
+updates for `rho`, `rho-browser` and `rho-dev`. The [package mapping](#application-and-executor)
+and [reference tests](#reference-contract-anchors) identify the TypeScript
+owners and executable contracts for all eleven runtime packages.
+
+| Rho workflow | TypeScript behavior | Verification |
+| --- | --- | --- |
+| Telegram scheduled jobs, `schedule_tracking.rb` and `schedule_workflow.rb` | Polling saves each page of occurrences with its cursor. A pending input keeps its page eligible for another poll. Reading `/job history` binds the listed task IDs to their original requester and child conversation before replying. An explicit Stop or Steer can address the child, and a bare Stop still selects foreground work. A parent report and a separately addressed child result retain their destinations. | `test/telegram.test.ts` interrupts a poll after 100 occurrences, restarts it, and exercises history, ownership, cancellation and steering. `test/telegram-workers.test.ts` exercises a parent with only a scheduled job. |
+| Development CLI, `rho-dev/lib/rho/dev/conversation.rb` | `adaptations --model PROVIDER/REFERENCE` shows the selected row, match, tool styles, description recuts, summarizer digest and hint IDs. A different boot row is identified. With the service offline, the CLI reads the saved model and local adaptation files. Connected inspection includes the model catalog response or its read error. | `test/adaptations.test.ts`, `test/dev.test.ts` and `test/runtime.test.ts` exercise selection, a separate offline CLI process, and the connected management operation. |
+
+The source Telegram ingress used a scratch Bot on Nexus at `localhost:3000`
+with a loopback Telegram transport. After restarting ingress, `/job history`
+returned the input ID for job `01a207c2-5936-7409-9e90-a3d32b454fa7`.
+Explicit Stop canceled that input in its child conversation. The stored cursor
+matched the execution page returned by Nexus. The Bot and workspace were removed.
+A separate admitted occurrence reached running during observation. Verification
+of a completed parent report used a controlled callback.
+
+Runtime conformance passed 444 tests on macOS. The Linux-only byte-preserving
+filename case skipped. Both runtime type checks, the package build and root
+`bun run check` passed. The Core MCP and Integration suites passed 224 tests.
+The CLI and Server Nexus adapters passed three tests, and the Protocol
+identifier check passed. Selected Rho suites passed 172 tests across the eleven
+runtime packages. The [UI review](../nexus-ui/docs/rho-webui-parity.md#workspace-schedules)
+records the workspace schedule and Chromium checks.
 
 ## Editor MCP and workspace run listing
 
@@ -331,7 +359,7 @@ Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
   admission and preserves the recipient's declaration. Code Mode is omitted when the
   runtime or extension does not own it. Persistent local grants require declaration
   ownership; one-time Human approvals retain exact conversation/run ownership.
-  Editor filesystem/MCP attachments require this machine's runner. Models are listed
+  Editor filesystem capabilities require this machine's runner. Agent-owned editor MCP mounts also work with a remote runner. Models are listed
   with Nexus's `text_generation` workload.
 - Approval defaults remain Ask. Optional integration defaults remain OpenCode's.
   Development controls remain source-only. UI layout, host document-title control,

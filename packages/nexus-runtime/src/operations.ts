@@ -6,6 +6,7 @@ import {
   APIError,
   Conflict,
   NotFound,
+  TransportError,
   type AccessEntry,
   type CheckpointRestoration,
   type Client,
@@ -398,12 +399,16 @@ export class Operations {
       const prepared = await this.application.prepare()
       const model = input.model ?? prepared.model
 
-      return {
-        model,
-        configuration: prepared.agent_configuration,
-        adaptations: this.application.defaults().adaptations?.(model),
-        facts: (await this.member.models.list(undefined, options)).find((row) => row.ref === model) ?? null,
-      }
+      const adaptation = this.application.defaults().adaptations?.(model)
+      const catalog = await this.member.models.list(undefined, options).then(
+        (rows) => ({ facts: rows.find((row) => row.ref === model) ?? null }),
+        (error: unknown) => {
+          if (!(error instanceof APIError || error instanceof TransportError)) throw error
+          return { facts: null, catalog_error: error.message }
+        },
+      )
+
+      return { model, configuration: prepared.agent_configuration, adaptations: adaptation, ...catalog }
     }
     if (input.action === "target") {
       const conversation =
