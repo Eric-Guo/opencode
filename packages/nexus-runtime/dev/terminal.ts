@@ -743,18 +743,12 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
         timeout: parsed.number("timeout") ?? 30000,
       }),
     )
-    print(result)
     const detail = object(result.task)
-    if (!parsed.values.json && Array.isArray(detail.content)) {
-      for (const block of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(detail.content)) {
-        if (block.type === "text") terminal.write(String(block.text) + "\n")
-        if (block.type === "resource_link")
-          terminal.write(
-            "link: " + String(block.name ?? "") + " " + String(block.uri).replace("nexus://uploads/", "") + "\n",
-          )
-      }
-    }
-    return object(detail.task).status === "completed" ? 0 : 1
+    const task = object(detail.task)
+    if (parsed.values.json) print(result)
+    else terminal.write("run: " + result.public_id + "\n" + formatTask(detail, task))
+
+    return task.status === "completed" ? 0 : 1
   }
   const host = word(0, "HOST")
   const resolved = await target(host)
@@ -886,11 +880,14 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     before: parsed.text("before"),
   })
   if (parsed.verb === "task") {
-    const task = object(object(result).task)
-    const target = mcpTaskLabel(task)
-    if (target && !parsed.values.json) terminal.write(target + "\n")
+    const detail = object(result)
+    const task = object(detail.task)
     const hint = heldTaskHint(task)
     if (hint) terminal.error(hint + "\n")
+    if (parsed.values.json) print(result)
+    else terminal.write(formatTask(detail, task))
+
+    return 0
   }
   if (parsed.verb === "approve") {
     const response = object(result)
@@ -1037,6 +1034,42 @@ function formatPhases(result: JsonValue) {
       ...(byModel.length > 1 ? byModel.map(([model, part]) => "  " + model + "  " + usage(object(part))) : []),
     ].join("\n") + "\n"
   )
+}
+
+function formatTask(detail: JsonObject, task: JsonObject) {
+  const lines = ["task: " + task.key + " (" + task.kind + ") " + task.status]
+  if (task.tool_name) lines.push("tool: " + (mcpTaskLabel(task) ?? task.tool_alias ?? task.tool_name))
+  if (detail.tool_input != null) lines.push("input: " + JSON.stringify(detail.tool_input))
+  if (detail.prompt) lines.push("asked: " + detail.prompt)
+  if (Array.isArray(detail.options))
+    lines.push("options: " + detail.options.join(" | ") + (detail.multi ? " (multiple)" : ""))
+  if (task.error) {
+    const error = object(task.error)
+    lines.push("error: " + [error.key, error.detail].filter(Boolean).join(" — "))
+  }
+  if (task.approval) {
+    const fact = object(task.approval)
+    lines.push("approval: " + fact.origin + (fact.decided_by ? " (" + fact.decided_by + ") at " + fact.decided_at : ""))
+  }
+  if (detail.title) lines.push("title: " + detail.title)
+  if (detail.metadata != null) lines.push("metadata: " + JSON.stringify(detail.metadata))
+  if (detail.structured_content != null || (task.tool_name === "code" && detail.structured_content === null))
+    lines.push("structure: " + JSON.stringify(detail.structured_content))
+
+  if (Array.isArray(detail.content)) {
+    for (const block of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(detail.content)) {
+      if (block.type === "text") lines.push(String(block.text))
+      else if (block.type === "resource_link") {
+        const facts = [block.mimeType, block.size != null && block.size + " B"].filter(Boolean).join(", ")
+        const id = String(block.uri).replace(/^nexus:\/\/uploads\//, "")
+        lines.push("link: " + [block.name, facts && "(" + facts + ")", id].filter(Boolean).join(" "))
+      }
+    }
+  } else {
+    const text = detail.content ?? detail.output ?? detail.output_preview
+    if (typeof text === "string") lines.push(text)
+  }
+  return lines.join("\n") + "\n"
 }
 
 function mcpTaskLabel(task: JsonObject) {
