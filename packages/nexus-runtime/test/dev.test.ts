@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -1374,8 +1374,14 @@ test("regeneration receipt replay never restores checkpoints or redirects a form
   }
 })
 
-test("one-shot tool requests capture runner placement, retain author guard rules and stop an unsuccessful request", async () => {
+test.each([
+  ["timed_out", "tool_timeout"],
+  ["completed", null],
+  ["failed", "tool_failed"],
+] as const)("call_tool waits for the runner task to settle as %s", async (status, error) => {
   const writes: { path: string; body: unknown }[] = []
+  const events: string[] = []
+  const clock = spyOn(performance, "now").mockReturnValue(0)
   const rule = { tool: "bash", path: "command", match: "rm -rf /*", verdict: "deny" }
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
@@ -1421,10 +1427,25 @@ test("one-shot tool requests capture runner placement, retain author guard rules
         },
         { status: 201 },
       )
-    if (path.endsWith("/tasks/call_tool"))
+    if (path.endsWith("/tasks/call_tool")) {
+      const next = events.length ? status : "dispatched"
+      events.push(next)
+      // An unclaimed task can still be dispatched when the next park timeout sweep is due.
+      if (next === "dispatched") clock.mockReturnValue(8000)
+
       return Response.json({
-        task: { ...task, key: "call_tool", kind: "tool_task", status: "failed", error: { key: "fixture_failure" } },
+        task: {
+          ...task,
+          key: "call_tool",
+          kind: "tool_task",
+          status: next,
+          ...(next === "completed" ? { output: "finished" } : {}),
+          ...(next === status && error ? { error: { key: error } } : {}),
+        },
       })
+    }
+    if (path.endsWith("/stop")) events.push("stop")
+
     return Response.json({ run: { public_id: "relay", status: "running", deliverable_task_key: "call_tool" } })
   })
   const application = new NexusApplication(
@@ -1433,16 +1454,18 @@ test("one-shot tool requests capture runner placement, retain author guard rules
     () => ({}),
   )
   try {
-    expect(
-      await application.operations.command({
-        action: "call_tool",
-        runner: "runner",
-        tool: "bash",
-        input: { command: "false" },
-        key: "relay",
-        timeout: 2000,
-      }),
-    ).toMatchObject({ public_id: "relay", task: { task: { status: "failed" } } })
+    const output: string[] = []
+    const result = await runDevelopment(["call_tool", "runner", "bash", '{"command":"pwd"}', "--timeout", "1000"], {
+      command: async (input) => json(JSON.stringify(await application.operations.command(input))),
+      signal: new AbortController().signal,
+      write: (line) => output.push(String(line)),
+      error: (line) => output.push(line),
+    })
+
+    expect(result).toBe(error ? 1 : 0)
+    expect(output.join("")).toContain("run: relay\ntask: call_tool (tool_task) " + status)
+    expect(output.join("")).toContain(error ? "error: " + error : "finished")
+    expect(events).toEqual(["dispatched", status, ...(error ? ["stop"] : [])])
     expect(writes[0].body).toMatchObject({
       run: {
         approval_rules: [{ ...rule, origin: "author" }],
@@ -1450,15 +1473,20 @@ test("one-shot tool requests capture runner placement, retain author guard rules
           {
             tool: {
               name: "bash",
-              timeout_ms: 2000,
+              timeout_ms: 1000,
               executor_context: { "opencode.environment": { root: "/captured", directories: [], anchor: null } },
             },
           },
         ],
       },
     })
-    expect(writes.at(-1)).toEqual({ path: "/agent_api/v1/workspaces/workspace/runs/relay/stop", body: { force: true } })
+    if (error)
+      expect(writes.at(-1)).toEqual({
+        path: "/agent_api/v1/workspaces/workspace/runs/relay/stop",
+        body: { force: true },
+      })
   } finally {
+    clock.mockRestore()
     fixture.server.stop(true)
   }
 })

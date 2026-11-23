@@ -13,9 +13,43 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The latest review covers [recorded changes and published outputs](#recorded-changes-and-published-outputs).
+tests below. The latest review covers [standalone tool settlement](#standalone-tool-settlement).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Standalone tool settlement
+
+Reviewed November 24, 2026 from OpenCode `dddbd23cafa` and Nexus UI `57d366e`.
+Cybros `7a8243168` still has the verified `agents/rho` tree `7ea67f07b`.
+
+Against a controlled Nexus peer, Rho's `call_tool RUNNER code` went through the
+development CLI, Ops daemon, executor and claim bridge. Its raw tool step had an
+empty frozen tool catalog. The executor reported `unsupported_binding` before
+evaluating `return 0`, and the CLI printed the failed task and exited 1.
+
+With a one-second step timeout and a peer that settled the task after 7.5 seconds,
+Rho waited for the terminal task, stopped its run, and printed the result.
+OpenCode stopped the run at six seconds and printed no task. The relay now
+waits for Nexus to settle the task under the requested step timeout.
+The regression in `test/dev.test.ts` checks the output, exit status and stop order for `timed_out`,
+`failed` and `completed`, including the original runner placement and author rules.
+
+On `localhost:3000`, a scratch runner announced `read` and left a one-second
+request unclaimed in a private workspace. The last poll before settlement still
+showed `dispatched` at 28.9 seconds. At 29.5 seconds the source runtime read
+`timed_out` with `tool_timeout` and sent one stop. The terminal printed the task
+and exited 1.
+After the runner started, a read returned the scratch file marker, matched the
+stored task in JSON and exited 0 with zero stops. Standalone `code` returned
+`tool_failed` with `unsupported_binding` and exited 1. The deleted workspace
+returned HTTP 404. The runner and both keys were revoked, the scratch Agent was
+removed, and the elected service reported ready on its original pairing.
+
+The affected Rho and Ruby SDK suites passed 135 cases. Runtime conformance passed
+451 tests across 77 files with Chromium, PTY and WebRTC. The Linux-only filename
+case skipped on macOS. The three settlement cases each passed ten consecutive
+runs. Both runtime type checks, the build, the CLI and Server Nexus tests, the
+Protocol identifier test and the root `bun run check` passed.
 
 ## Recorded changes and published outputs
 
