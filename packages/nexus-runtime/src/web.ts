@@ -10,6 +10,8 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { extname, join } from "node:path"
 import { scheduler } from "node:timers/promises"
 import ipaddr from "ipaddr.js"
+import { Schema } from "effect"
+import { Configuration, type ExtensionDescriptor } from "./configuration"
 import type { CommitTask } from "@cybros/agent"
 import type { RunnerContext } from "./extensions"
 import { outputHead } from "./output-window"
@@ -17,6 +19,20 @@ import { outputHead } from "./output-window"
 const CAP = 5 * 1024 * 1024
 const ACTIONABLE_URL_BYTES = 8190
 const INVISIBLE = /[\u200B-\u200F\u2028-\u202E\u2060-\u2064\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
+export const webDescriptor: ExtensionDescriptor = {
+  id: "nexus.web-tools",
+  name: "Web reader",
+  description: "Read HTTP(S) pages, with bounded responses and same-site redirects.",
+  default_enabled: true,
+  configuration_version: 1,
+  configuration_schema: {
+    type: "object",
+    properties: { allow_private_network: { type: "boolean" } },
+    additionalProperties: false,
+  },
+  defaults: { allow_private_network: false },
+}
+
 export type WebOptions = {
   allowPrivateNetwork?: boolean
   totalTimeout?: number
@@ -30,6 +46,32 @@ export function webSite(value: unknown) {
   const match = /^(https?:\/\/[^/?#]+)(?:[/?#]|$)/i.exec(value)
   if (!match || /[\s\\]/.test(value) || /[@*|]/.test(match[1])) throw new Error("Expected a literal HTTP(S) site.")
   return match[1]
+}
+
+/** The operator reads from the CLI machine, including when its managed service is offline. */
+export async function operatorWebFetch(url: string, storage: string, raw: boolean, signal: AbortSignal) {
+  const settings = new Configuration(join(storage, "configuration.json"))
+  await settings.restore()
+  const selection = settings.selection(webDescriptor)
+  if (!selection.enabled) throw new Error("The Nexus web reader is disabled.")
+
+  const result = await webFetch(url, signal, undefined, {
+    allowPrivateNetwork: selection.configuration.allow_private_network === true,
+    raw: true,
+  })
+  if (result.is_error) throw new Error(String(result.content))
+
+  const metadata = Schema.decodeUnknownSync(
+    Schema.Struct({ status_line: Schema.String, encoding: Schema.Literals(["base64", "utf8"]) }),
+  )(result.structured_content)
+  const content = Schema.decodeUnknownSync(Schema.String)(result.content)
+  const body =
+    metadata.encoding === "base64"
+      ? Buffer.from(content, "base64")
+      : raw
+        ? content
+        : content.replace(INVISIBLE, (char) => "\\u{" + char.codePointAt(0)!.toString(16).toUpperCase() + "}")
+  return { status: metadata.status_line, body }
 }
 
 function webURL(value: string) {
@@ -56,7 +98,7 @@ function publicAddress(address: string, allowPrivateNetwork: boolean) {
 export async function webFetch(
   input: string,
   signal: AbortSignal,
-  publish: NonNullable<RunnerContext["publish"]>,
+  publish: RunnerContext["publish"],
   options: WebOptions = {},
 ): Promise<Omit<CommitTask, "claim_token">> {
   const active = AbortSignal.any([signal, AbortSignal.timeout(options.totalTimeout ?? 30000)])
@@ -263,7 +305,15 @@ export async function webFetch(
                 ],
           structured_content: {
             ...details,
-            ...(options.raw ? { status_line: heading, encoding: rendered.encoding ?? "utf8" } : {}),
+            ...(options.raw
+              ? {
+                  status_line:
+                    rendered.encoding === "base64"
+                      ? `${shorten(url.href, 512)} — ${status} ${details.content_type}; ${formatSize(bytes.length)}`
+                      : heading,
+                  encoding: rendered.encoding ?? "utf8",
+                }
+              : {}),
             ...(rendered.structured_content &&
             typeof rendered.structured_content === "object" &&
             !Array.isArray(rendered.structured_content)
@@ -309,7 +359,7 @@ class WebTooLarge extends Error {
 export async function renderWebContent(
   bytes: Buffer<ArrayBuffer>,
   contentType: string,
-  publish: NonNullable<RunnerContext["publish"]>,
+  publish: RunnerContext["publish"],
   options: { artifacts?: string; url?: string; raw?: boolean } = {},
 ): Promise<
   Omit<CommitTask, "claim_token"> & {
@@ -331,6 +381,7 @@ export async function renderWebContent(
         ? "." + subtype
         : ".bin"
     const name = "web-" + createHash("sha256").update(bytes).digest("hex").slice(0, 16) + extension
+    if (!publish) throw new Error("Web capture requires an upload context.")
     const path = await capture(bytes, name, options.artifacts)
     const file = await publish(new Blob([bytes], { type: type || "application/octet-stream" }), name)
     return { content: [{ type: "text", text: `${formatSize(bytes.length)} saved to ${path ?? name}` }, file] }
@@ -351,6 +402,7 @@ export async function renderWebContent(
   if (!limits) return { content: output.text, structured_content: details, ...metadata }
 
   const name = "web-" + createHash("sha256").update(text).digest("hex").slice(0, 16) + ".md"
+  if (!publish) throw new Error("Web capture requires an upload context.")
   const path = await capture(Buffer.from(text), name, options.artifacts)
   const file = await publish(new Blob([text], { type: html ? "text/markdown" : type }), name)
   const footer = limits.first_line_exceeds_limit

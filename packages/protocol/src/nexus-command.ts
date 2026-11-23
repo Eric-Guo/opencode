@@ -11,6 +11,13 @@ const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("interval"), starts_at: Schema.String, every_seconds: Schema.Int }),
   Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
 ])
+const ScheduleControls = {
+  model: Schema.optional(Schema.NonEmptyString),
+  reasoning_effort: Schema.optional(Schema.String),
+  reasoning_enabled: Schema.optional(Schema.Boolean),
+  fallback_models: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+  tool_names: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+}
 const InferenceScope = { workspace: Schema.optional(Schema.NonEmptyString) }
 export const InferenceCommand = Schema.Union([
   Schema.Struct({
@@ -181,8 +188,13 @@ export const NexusCommand = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("memory.collections"), workspace: Schema.optional(Schema.NonEmptyString) }),
   Schema.Struct({
+    action: Schema.Literal("schedule.defaults"),
+    workspace: Schema.optional(Schema.NonEmptyString),
+    conversation: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
     action: Schema.Literal("schedule.create"),
-    model: Schema.optional(Schema.NonEmptyString),
+    ...ScheduleControls,
     workspace: Schema.optional(Schema.NonEmptyString),
     approval: Schema.optional(Schema.Literals(["ask", "rules", "bypass"])),
     conversation: Schema.String,
@@ -206,12 +218,12 @@ export const NexusCommand = Schema.Union([
   }),
   Schema.Struct({
     action: Schema.Literal("schedule.update"),
-    model: Schema.optional(Schema.NonEmptyString),
+    ...ScheduleControls,
     workspace: Schema.optional(Schema.NonEmptyString),
     conversation: Schema.String,
     id: Schema.String,
     version: Schema.Int,
-    name: Schema.optional(Schema.String),
+    name: Schema.optional(Schema.NullOr(Schema.String)),
     approval: Schema.optional(Schema.Literals(["ask", "rules", "bypass"])),
     prompt: Schema.optional(Schema.String),
     rule: Schema.optional(Rule),
