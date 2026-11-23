@@ -565,6 +565,18 @@ test.each([
         starting: 0,
       })
       if ("apiKey" in fixture) {
+        expect(
+          await runtime.manage({
+            action: "extension.call",
+            name: "editor.mcp.attach",
+            input: {
+              workspace: "workspace",
+              conversation: "conversation",
+              cwd: "/remote/project",
+              servers: [{ name: "editor", command: "peer" }],
+            },
+          }),
+        ).toMatchObject({ tools: [], issues: [expect.stringContaining("mcp_unavailable")] })
         downloads.bound = true
         const download = {
           workspace: "workspace",
