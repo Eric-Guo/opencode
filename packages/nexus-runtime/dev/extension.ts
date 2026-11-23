@@ -18,7 +18,7 @@ export function register(api: ExtensionAPI) {
       const conversations = await api.application().operations.command(input, { signal: api.signal })
       const runs = Schema.decodeUnknownSync(Schema.Struct({ side: Schema.optional(Schema.Boolean) }))(input).side
         ? []
-        : await streams.command({ action: "stream.followers" })
+        : await streams.observations()
       return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify({ conversations, runs }))
     }
     const operations = api.application().operations
