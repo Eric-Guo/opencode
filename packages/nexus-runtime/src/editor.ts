@@ -38,7 +38,7 @@ type Session = {
   codeAvailable: boolean
   own: boolean
   local: boolean
-  mcp: readonly string[]
+  mountedMcp: boolean
   last?: { execution: InputExecution; transcript: EditorTranscript }
   question?: { decision: ExecutionDecision; execution: InputExecution; transcript: EditorTranscript }
 }
@@ -502,7 +502,11 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       ? await options.modePolicy?.(id)
       : { available: false, code_mode_available: false, code_mode: false }
     const saved = conversation.metadata["opencode.acp.mode"]
-    const mcp = local ? await options.attachMcp?.({ conversation: id, cwd: roots[0], servers }) : undefined
+    const canMount = own || local
+    const mcp =
+      canMount && servers.length ? await options.attachMcp?.({ conversation: id, cwd: roots[0], servers }) : undefined
+    const issues =
+      mcp?.issues ?? (servers.length ? ["This agent cannot serve editor MCP tools for this conversation."] : [])
     const session: Session = {
       roots,
       own,
@@ -517,7 +521,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       code:
         policy?.code_mode ??
         (options.codeMode ? await options.codeMode(id) : conversation.metadata["opencode.acp.code"] !== false),
-      mcp: mcp?.tools ?? [],
+      mountedMcp: !!mcp || sessions.get(id)?.mountedMcp === true,
     }
 
     sessions.set(id, session)
@@ -562,9 +566,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     return {
       modes: { currentModeId: session.mode, availableModes: modes },
       configOptions: config(session),
-      ...(mcp?.issues.length || (!local && servers.length)
-        ? { _meta: { "opencode.mcp.issues": mcp?.issues ?? ["Editor MCP attachments require this machine’s runner."] } }
-        : {}),
+      ...(issues?.length ? { _meta: { "opencode.mcp.issues": issues } } : {}),
     }
   }
   const save = async (id: string, patch: JsonObject, signal: AbortSignal) => {
@@ -615,7 +617,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       const paths = editorRoots(params.cwd, params.additionalDirectories)
       const roots = options.open ? paths : await localEditorRoots(paths)
 
-      validateServers(params.mcpServers, !!options.attachMcp)
+      validateServers(params.mcpServers)
 
       const result = options.open
         ? { conversation: { public_id: await options.open({ root: roots[0], directories: roots.slice(1) }) } }
@@ -644,7 +646,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     })
     .onRequest("session/load", async ({ params, signal, client: peer }) => {
       await authenticate(signal)
-      validateServers(params.mcpServers, !!options.attachMcp)
+      validateServers(params.mcpServers)
 
       return attach(
         params.sessionId,
@@ -657,7 +659,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     })
     .onRequest("session/resume", async ({ params, signal, client: peer }) => {
       await authenticate(signal)
-      validateServers(params.mcpServers ?? [], !!options.attachMcp)
+      validateServers(params.mcpServers ?? [])
 
       return attach(
         params.sessionId,
@@ -673,7 +675,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       pending.get(params.sessionId)?.abort()
       sessions.delete(params.sessionId)
       bridge.release(params.sessionId)
-      if (session.local) await options.detachMcp?.(params.sessionId)
+      if (session.mountedMcp) await options.detachMcp?.(params.sessionId)
       if (session.local) await options.setEnvironment?.(params.sessionId, null)
       return {}
     })
@@ -851,16 +853,15 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     await bridge.close()
     await Promise.allSettled(background)
     await Promise.allSettled(
-      [...sessions]
-        .filter(([, session]) => session.local)
-        .flatMap(([id]) => [options.detachMcp?.(id), options.setEnvironment?.(id, null)]),
+      [...sessions].flatMap(([id, session]) => [
+        session.mountedMcp && options.detachMcp?.(id),
+        session.local && options.setEnvironment?.(id, null),
+      ]),
     )
   }
 }
 
-function validateServers(servers: readonly McpServer[], supported: boolean) {
-  if (servers.length && !supported)
-    throw RequestError.invalidParams(undefined, "Session MCP attachments are unavailable.")
+function validateServers(servers: readonly McpServer[]) {
   if (new Set(servers.map((server) => server.name)).size !== servers.length)
     throw RequestError.invalidParams(undefined, "Duplicate MCP server names.")
 }

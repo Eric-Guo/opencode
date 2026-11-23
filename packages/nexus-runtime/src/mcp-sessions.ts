@@ -14,6 +14,8 @@ type Held = Session & {
   validation: string[]
 }
 
+export class McpUnavailable extends Error {}
+
 /** A registrar set belongs to the persisted environment anchor, including its inherited children. */
 export class McpSessions {
   private readonly held = new Map<string, Held>()
@@ -46,7 +48,7 @@ export class McpSessions {
     const key = JSON.stringify([input.workspace, input.conversation])
     const entries = Schema.decodeUnknownSync(Schema.Array(Schema.Json))(input.servers)
     if (entries.length && !this.available())
-      throw new Error("mcp_unavailable: enable the MCP extension before attaching editor servers.")
+      throw new McpUnavailable("mcp_unavailable: enable the MCP extension before attaching editor servers.")
     const previous = this.held.get(key)
     const digest = mcpSessionDigest(entries)
 
@@ -70,7 +72,7 @@ export class McpSessions {
       })
       if (!this.available()) {
         await candidate.close()
-        throw new Error("mcp_unavailable: the MCP extension was unloaded while attaching editor servers.")
+        throw new McpUnavailable("mcp_unavailable: the MCP extension was unloaded while attaching editor servers.")
       }
       const held: Held = {
         ...candidate,
