@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test"
 import { gzipSync } from "node:zlib"
 import { readFile, readdir } from "node:fs/promises"
-import { webFetch, renderWebContent } from "../src/web"
+import { join } from "node:path"
+import { Configuration } from "../src/configuration"
+import { operatorWebFetch, webDescriptor, webFetch, renderWebContent } from "../src/web"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 
 test("web fetch follows bounded same-site redirects, decodes compressed bodies and preserves HTTP errors", async () => {
@@ -226,7 +228,9 @@ test("HTML metadata and clipped multibyte tails survive rendering without hidden
   )
   expect(page).toMatchObject({ title: "One & two", content: "visible" })
   const links = await renderWebContent(
-    Buffer.from('<template><base href="/ignored/"></template><a href="topic/42#reply">Topic</a><base href="/discussion/">'),
+    Buffer.from(
+      '<template><base href="/ignored/"></template><a href="topic/42#reply">Topic</a><base href="/discussion/">',
+    ),
     "text/html",
     publish,
     { url: "https://example.test/home/" },
@@ -307,4 +311,32 @@ test("redirect refusals preserve actionable destinations without following malfo
   } finally {
     server.stop(true)
   }
+})
+
+test("offline operator reads its installed web configuration and returns the whole rendering or binary bytes", async () => {
+  await using directory = await tmpdir()
+  const text = "read this line\n".repeat(6000)
+  const bytes = Uint8Array.from([0, 255, 10, 127])
+  using server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (new URL(request.url).pathname === "/binary")
+        return new Response(bytes, { headers: { "Content-Type": "image/png" } })
+      return new Response(text, { headers: { "Content-Type": "text/plain" } })
+    },
+  })
+  const settings = new Configuration(join(directory.path, "configuration.json"))
+  const read = (path: string, raw: boolean) =>
+    operatorWebFetch(new URL(path, server.url).href, directory.path, raw, AbortSignal.timeout(5000))
+  await expect(read("/", false)).rejects.toThrow("private or reserved address")
+  await settings.replace(webDescriptor, { enabled: true, configuration: { allow_private_network: true } })
+  expect(await read("/", true)).toMatchObject({ body: text, status: expect.stringContaining("200 text/plain") })
+  expect(await read("/binary", false)).toEqual({
+    body: Buffer.from(bytes),
+    status: new URL("/binary", server.url).href + " — 200 image/png; 4B",
+  })
+  expect((await read("/", false)).body).toBe(text)
+  await settings.replace(webDescriptor, { enabled: false, configuration: { allow_private_network: true } })
+  await expect(read("/", true)).rejects.toThrow("disabled")
 })

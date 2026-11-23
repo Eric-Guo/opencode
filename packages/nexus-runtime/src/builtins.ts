@@ -1,3 +1,4 @@
+import { webDescriptor } from "./web"
 import { isAbsolute, join } from "node:path"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -119,19 +120,7 @@ export async function builtinExtensions(
       },
     },
     {
-      descriptor: {
-        id: "nexus.web-tools",
-        name: "Web reader",
-        description: "Read HTTP(S) pages, with bounded responses and same-site redirects.",
-        default_enabled: true,
-        configuration_version: 1,
-        configuration_schema: {
-          type: "object",
-          properties: { allow_private_network: { type: "boolean" } },
-          additionalProperties: false,
-        },
-        defaults: { allow_private_network: false },
-      },
+      descriptor: webDescriptor,
       async register(api) {
         const { webFetch } = await import("./web")
         const configuration = Schema.decodeUnknownSync(Schema.Struct({ allow_private_network: Schema.Boolean }))(

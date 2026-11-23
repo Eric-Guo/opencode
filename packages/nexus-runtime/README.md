@@ -51,6 +51,29 @@ completion, and `130` for interruption. `--output-format` accepts `text`, `json`
 `POST /api/experimental/nexus/run` SSE endpoint. HTTP recovery remains authoritative
 when realtime transcript frames are unavailable.
 
+## Scheduled jobs and web fetch
+
+Use `opencode nexus jobs CONVERSATION` to list a conversation's jobs. The terminal and
+Telegram accept the same timing expressions. Absolute times include their UTC offset.
+The `list` and `history` commands print the cursor for the next page when one exists.
+
+```sh
+opencode nexus jobs CONVERSATION create once in 20m Review the build
+opencode nexus jobs CONVERSATION create daily 09:00 Australia/Perth Summarize the overnight runs
+opencode nexus jobs CONVERSATION show JOB
+opencode nexus jobs CONVERSATION edit JOB every 2h
+opencode nexus jobs CONVERSATION history JOB --output-format json
+```
+
+Use `pause`, `resume`, `run` or `cancel` with a job ID. A create accepts `--model`
+and each command accepts `--workspace`. Edits read the current lock version before
+submitting the changed fields. `opencode nexus schedules` lists jobs across the workspace.
+
+`opencode nexus web-fetch URL [--raw]` uses the local Web reader configuration and
+works while disconnected. It writes the whole rendering or the original binary to
+stdout and the HTTP status line to stderr. A refusal writes its explanation to stderr
+and exits 1. The same network and size limits apply as for the runner tool.
+
 ## Standalone inference requests
 
 The paired Agent can submit a standalone workload in its selected workspace.
