@@ -24,7 +24,9 @@ const variant = {
 test("Published files follow canonical callback variants and ignore prose, input attachments and MCP impostors", async () => {
   const reads: string[] = []
   const service = storeFixture((request) => {
-    const path = new URL(request.url).pathname
+    const url = new URL(request.url)
+    expect(url.searchParams.has("include_hidden")).toBe(false)
+    const path = url.pathname
     reads.push(path)
     if (path.endsWith("/runs/child-run"))
       return Response.json({
@@ -61,6 +63,13 @@ test("Published files follow canonical callback variants and ignore prose, input
               type: "resource_link",
               uri: "file:///tmp/private.txt",
               name: "private.txt",
+              mimeType: "text/plain",
+              size: 10,
+            },
+            {
+              type: "resource_link",
+              uri: "nexus://uploads/output",
+              name: "renamed.txt",
               mimeType: "text/plain",
               size: 10,
             },

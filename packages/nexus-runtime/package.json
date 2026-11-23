@@ -18,6 +18,7 @@
     ".": "./src/runtime.ts",
     "./editor": "./src/editor.ts",
     "./run": "./src/run.ts",
+    "./experimental/history": "./src/recorded-history.ts",
     "./experimental/executor": "./src/executor.ts"
   },
   "scripts": {
