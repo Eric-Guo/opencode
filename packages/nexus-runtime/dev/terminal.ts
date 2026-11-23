@@ -105,7 +105,8 @@ export const developmentHelp = `Nexus development controls (source checkout only
   do [TEXT]               open a conversation, optionally with text or attachments
   say HOST [TEXT]         submit or schedule another input (--mode steer|queue|steer_now)
   runs [--status STATUS] [--attention ATTENTION] [--after CURSOR]
-  followers | providers | models | adaptations | rules
+  followers | providers | models | rules
+  adaptations [--model PROVIDER/REFERENCE] [--json]
   attach HOST | watch HOST | follow HOST | result HOST
   transcript HOST [--before CURSOR] [--limit N] [--follow | --prefix KEY]
   graph HOST | phases HOST | task HOST KEY | request HOST KEY
@@ -248,7 +249,12 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     if (page.next_after) terminal.write("Next cursor (pass with --after): " + page.next_after + "\n")
     return 0
   }
-  if (["providers", "models", "rules", "adaptations", "followers"].includes(parsed.verb)) {
+  if (parsed.verb === "adaptations") {
+    const result = await call("adaptations", { model: parsed.text("model") })
+    terminal.write(formatAdaptationInspection(result, parsed.values.json === true))
+    return 0
+  }
+  if (["providers", "models", "rules", "followers"].includes(parsed.verb)) {
     print(
       await call(parsed.verb, {
         attention: parsed.text("attention"),
@@ -1391,6 +1397,32 @@ function formatPromptPreview(value: JsonValue) {
     JSON.stringify(rendered.entries, null, 2),
     "",
   ].join("\n")
+}
+
+export function formatAdaptationInspection(value: JsonValue, json: boolean) {
+  if (json) return JSON.stringify(value, null, 2) + "\n"
+
+  const result = object(value)
+  const row = object(result.adaptations ?? {})
+  const facts = result.facts && object(result.facts)
+  return (
+    [
+      "Model: " + (result.model ?? "(no default model)"),
+      "Row: " + (row.row ?? "unknown") + (row.path ? " (" + row.path + ")" : ""),
+      row.selection && "Selection: " + row.selection + (row.matched ? " (" + row.matched + ")" : ""),
+      Array.isArray(row.models) && "Model patterns: " + (row.models.join(", ") || "(none)"),
+      Array.isArray(row.tool_style) && "Tool style: " + row.tool_style.join(", "),
+      row.tool_descriptions !== undefined && "Tool descriptions: " + row.tool_descriptions,
+      ...(Array.isArray(row.recuts) ? row.recuts.map((recut) => "Recut: " + recut) : []),
+      row.summarizer && "Summarizer: " + row.summarizer,
+      Array.isArray(row.lead_hints) && "Lead hints: " + (row.lead_hints.join(", ") || "(none)"),
+      row.boot_row && "Boot row: " + row.boot_row,
+      "Catalog: " +
+        (result.catalog_error ?? (facts ? JSON.stringify(facts.capabilities) : "model unavailable or unknown")),
+    ]
+      .filter(Boolean)
+      .join("\n") + "\n"
+  )
 }
 
 export function formatDevelopment(value: JsonValue): string {

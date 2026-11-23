@@ -1463,6 +1463,59 @@ test("one-shot tool requests capture runner placement, retain author guard rules
   }
 })
 
+test("adaptation inspection resolves the saved model and local files with the service offline", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-offline-adaptations-"))
+  try {
+    const storage = join(directory, "opencode", "nexus-runtime")
+    await mkdir(join(storage, "adaptations"), { recursive: true })
+    await writeFile(
+      join(storage, "adaptations", "local.yml"),
+      "format: 1\nrow: local\nmodels: [fixture-*]\ntool_style: [nexus]\n",
+    )
+    await writeFile(
+      join(storage, "settings.json"),
+      JSON.stringify({
+        origin: "http://localhost",
+        identifier: "fixture",
+        directory,
+        workspace: "fixture",
+        model: "dev/fixture-model",
+      }),
+    )
+    const cli = async (...options: string[]) => {
+      const child = Bun.spawn([process.execPath, join(import.meta.dir, "../dev/cli.ts"), "adaptations", ...options], {
+        env: {
+          ...process.env,
+          PATH: directory,
+          XDG_DATA_HOME: directory,
+          XDG_STATE_HOME: directory,
+          OPENCODE_SERVICE_FILE: join(directory, "absent.json"),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const [code, output, error] = await Promise.all([child.exited, child.stdout.text(), child.stderr.text()])
+      expect(error).toBe("")
+      expect(code).toBe(0)
+      return output
+    }
+    expect(JSON.parse(await cli("--json"))).toMatchObject({
+      model: "dev/fixture-model",
+      facts: null,
+      catalog_error: "OpenCode service offline",
+      adaptations: { row: "local", source: "local", selection: "wildcard", matched: "fixture-*" },
+    })
+    const text = await cli("--model", "dev/other")
+    expect(text).toContain("Selection: fallback")
+    expect(text).toContain("Boot row: local")
+    expect(text).toContain("Summarizer: kernel default")
+    expect(text).toContain("Tool style: nexus")
+    expect(text).toContain("Catalog: OpenCode service offline")
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test("source CLI discovers the installed channel, authenticates privately, and follows mainline rounds", async () => {
   const directory = await mkdtemp(join(tmpdir(), "nexus-dev-service-"))
   const requests: JsonObject[] = []

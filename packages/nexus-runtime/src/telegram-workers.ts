@@ -14,17 +14,16 @@ export async function telegramWorkers(
 ) {
   const state = await document.read()
   if (!state) return
-  const roots = [
-    ...new Map(state.work.filter((work) => !work.worker).map((work) => [work.target.conversation, work])).values(),
-  ]
+  const parents = [...state.work.filter((work) => !work.worker), ...(state.jobs ?? [])]
+  const roots = [...new Map(parents.map((row) => [row.target.conversation, row.target])).values()]
   for (const root of roots) {
-    const chat = application.client.workspace(root.target.workspace).conversation(root.target.conversation)
+    const chat = application.client.workspace(root.workspace).conversation(root.conversation)
     const children = await chat.children({}, { signal })
     for (const child of children.items) {
       if (!child.active_turn_public_id) continue
 
       const turn = await application.client
-        .workspace(root.target.workspace)
+        .workspace(root.workspace)
         .conversation(child.public_id)
         .turns.fetch(child.active_turn_public_id, undefined, { signal })
         .catch((error: unknown) => {
@@ -35,10 +34,17 @@ export async function telegramWorkers(
         !turn?.input_public_id ||
         turn.kind !== "direct_reply" ||
         turn.inherited ||
-        turn.sender_conversation_public_id !== root.target.conversation
+        turn.sender_conversation_public_id !== root.conversation
       )
         continue
-      const owner = state.work.find((work) => work.execution?.run_public_id === turn.sender_run_public_id)
+      const known = state.work.find((work) => work.input === turn.input_public_id)
+      if (known) {
+        if (bind && !known.answerer) await bind(known, turn.answering_user_public_id)
+        continue
+      }
+      const owner =
+        turn.sender_run_public_id &&
+        state.work.find((work) => work.execution?.run_public_id === turn.sender_run_public_id)
       if (!owner) continue
       await document.change((state) => ({
         ...state!,
@@ -63,7 +69,7 @@ export async function telegramWorkers(
       const registered = (await document.read())!.work.find((row) => row.input === turn.input_public_id)!
       if (bind && !registered.answerer) await bind(registered, turn.answering_user_public_id)
     }
-    const cursor = state.history?.[root.target.conversation] ?? { position: 0, pending: [] }
+    const cursor = state.history?.[root.conversation] ?? { position: 0, pending: [] }
     const page = await chat.turns.list({ after_position: cursor.position, limit: 100 }, { signal })
     const pending = await Promise.all(
       cursor.pending.map((id) =>
@@ -82,10 +88,12 @@ export async function telegramWorkers(
       for (const source of turn.callback_sources) {
         const saved = (await document.read())!
         const owner =
-          saved.work.find((work) => work.execution?.run_public_id === source.sender_run_public_id) ??
+          saved.work.find(
+            (work) => source.sender_run_public_id && work.execution?.run_public_id === source.sender_run_public_id,
+          ) ??
           saved.work.find(
             (work) =>
-              work.target.conversation === root.target.conversation &&
+              work.target.conversation === root.conversation &&
               work.speaker === source.result.requester_speaker_public_id,
           )
         const existing = saved.work.find((work) => work.input === source.result.input_public_id)
@@ -94,7 +102,7 @@ export async function telegramWorkers(
         const work = existing ?? {
           ...owner!,
           id: "worker:" + source.result.input_public_id,
-          target: { workspace: root.target.workspace, conversation: source.result.conversation_public_id },
+          target: { workspace: root.workspace, conversation: source.result.conversation_public_id },
           input: source.result.input_public_id,
           source: [],
           worker: true,
@@ -141,9 +149,7 @@ export async function telegramWorkers(
       const actors = [...new Set(turn.callback_sources.map((row) => row.result.requester_speaker_public_id))]
       const owner =
         actors.length === 1
-          ? state.work.find(
-              (work) => work.target.conversation === root.target.conversation && work.speaker === actors[0],
-            )
+          ? parents.find((row) => row.target.conversation === root.conversation && row.speaker === actors[0])
           : undefined
       if (!owner) continue
       const report: TelegramWork = {
@@ -167,7 +173,7 @@ export async function telegramWorkers(
       if (saved.work.some((work) => work.id === report.id)) continue
       const files = await publishedArtifacts(
         application.client,
-        root.target.workspace,
+        root.workspace,
         {
           run: variant.run_public_id,
           results: turn.callback_sources
@@ -188,7 +194,7 @@ export async function telegramWorkers(
       ...state!,
       history: {
         ...state!.history,
-        [root.target.conversation]: {
+        [root.conversation]: {
           position: Math.max(cursor.position, ...page.items.map((turn) => turn.position)),
           pending: turns
             .filter((turn) => turn.callback_sources.length && turn.active_variant?.status !== "completed")
