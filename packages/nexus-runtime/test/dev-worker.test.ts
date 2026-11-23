@@ -57,6 +57,19 @@ test("the real development extension preserves SDK methods, live iterators, iden
           pagination: { next_after: url.searchParams.has("after") ? null : "next" },
         })
       }
+      if (url.pathname.endsWith("/model_providers"))
+        return Response.json({
+          model_providers: [
+            {
+              id: "local",
+              credentials: "instance",
+              enabled: true,
+              configured: false,
+              models: 3,
+              unavailable_until: "2026-12-01T00:00:00Z",
+            },
+          ],
+        })
       if (url.pathname.endsWith("/profile/agents")) return Response.json({ agents: [] })
       if (url.pathname.endsWith("/conversations"))
         return Response.json({ conversations: [], pagination: { next_after: null } })
@@ -83,6 +96,7 @@ test("the real development extension preserves SDK methods, live iterators, iden
         run: {
           public_id: "run",
           status: "running",
+          attention: { reason: "needs_approval", blocked_task_keys: ["call"], blocked_task_overflow: null },
           turn: { status: "running", conversation_public_id: "conversation" },
         },
       })
@@ -204,7 +218,30 @@ test("the real development extension preserves SDK methods, live iterators, iden
       next_after: "next",
     })
     expect(await manager.command("dev", { ...list, after: "next" })).toMatchObject({ items: [], next_after: null })
-    expect(await manager.command("dev", { action: "followers" })).toMatchObject({ conversations: [] })
+    expect(await manager.command("dev", { action: "followers" })).toMatchObject({
+      conversations: [],
+      runs: [{ run: "run", status: "running", attention: { reason: "needs_approval" }, until: null }],
+    })
+    const output: string[] = []
+    const terminal = {
+      signal: new AbortController().signal,
+      command: async (input: Parameters<typeof manager.command>[1]) =>
+        Schema.decodeUnknownSync(Schema.MutableJson)(await manager.command("dev", input)),
+      write: (text: string) => output.push(text),
+      error: (text: string) => {
+        throw new Error(text)
+      },
+    }
+    await runDevelopment(["followers"], terminal)
+    expect(output.pop()).toContain("run  running  ASKING: needs_approval")
+    await runDevelopment(["followers", "--side"], terminal)
+    expect(output.pop()).toContain("side of main")
+    await runDevelopment(["providers"], terminal)
+    expect(output.pop()).toBe(
+      "local  instance  enabled  unconfigured  3 models  unavailable until 2026-12-01T00:00:00Z\n",
+    )
+    await runDevelopment(["providers", "--json"], terminal)
+    expect(JSON.parse(output.pop()!)).toMatchObject([{ id: "local", configured: false, models: 3 }])
     expect(await manager.command("dev", { action: "followers", side: true })).toMatchObject({
       conversations: [{ public_id: "side", parent: "main" }],
       runs: [],

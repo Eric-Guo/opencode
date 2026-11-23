@@ -5400,6 +5400,40 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | {
+        readonly action: "inference.create"
+        readonly workspace?: string | null
+        readonly key: string
+        readonly model: string
+        readonly workload?:
+          | "decision"
+          | "text_generation"
+          | "embedding"
+          | "image_generation"
+          | "speech_generation"
+          | "transcription"
+          | null
+        readonly input: JsonValue
+        readonly live?: boolean | null
+        readonly configuration?: { readonly [x: string]: JsonValue } | null | null
+        readonly reasoning_effort?: string | null | null
+        readonly reasoning_enabled?: boolean | null | null
+        readonly upload_public_ids?: ReadonlyArray<string> | null | null
+        readonly billing_subject?: string | null | null
+        readonly fallback_models?: ReadonlyArray<string> | null | null
+        readonly model_selection?: {
+          readonly source: "default" | "inherited" | "explicit"
+          readonly model: string
+          readonly constraint: "any" | "model" | "provider" | "route"
+          readonly alternatives?: ReadonlyArray<string> | null
+        } | null | null
+      }
+    | { readonly action: "inference.list"; readonly workspace?: string | null }
+    | {
+        readonly action: "inference.subscribe" | "inference.unsubscribe"
+        readonly workspace?: string | null
+        readonly request: string
+      }
     | { readonly action: "workspace.list" }
     | { readonly action: "workspace.create"; readonly name: string; readonly key: string }
     | { readonly action: "workspace.use"; readonly workspace: string }

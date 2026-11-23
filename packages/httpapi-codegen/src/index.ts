@@ -1438,7 +1438,7 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
   const render = (type: string) => {
     const output = type
       .replace(namePattern, (reference) => names.get(reference) ?? reference)
-      .replaceAll("Schema.Json", "JsonValue")
+      .replace(/Schema\.(?:Mutable)?Json\b/g, "JsonValue")
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
   }
@@ -1506,7 +1506,7 @@ function structuralType(schema: Schema.Top) {
   const expand = expandReferences(
     new Map(document.references.nonRecursives.map((reference) => [reference.$ref, reference.code.Type])),
   )
-  return preserveStringSuggestions(expand(document.codes[0].Type).replaceAll("Schema.Json", "JsonValue"))
+  return preserveStringSuggestions(expand(document.codes[0].Type).replace(/Schema\.(?:Mutable)?Json\b/g, "JsonValue"))
 }
 
 function includesUndefined(ast: SchemaAST.AST): boolean {
