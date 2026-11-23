@@ -9,9 +9,46 @@ import { ServerConnection } from "../../services/server-connection"
 export default Runtime.handler(
   Commands.commands.nexus,
   Effect.fn("cli.nexus")(function* (input) {
+    if (input.words.length && input.action !== "jobs")
+      return yield* Effect.fail(new Error("Unexpected positional arguments."))
+    if (input.action === "web-fetch") {
+      if (Option.isNone(input.prompt)) return yield* Effect.fail(new Error("Use opencode nexus web-fetch URL [--raw]."))
+      const url = input.prompt.value
+      return yield* Effect.tryPromise(async (signal) => {
+        const { Global } = await import("@opencode/util/global")
+        const { operatorWebFetch } = await import("@opencode/nexus-runtime/web")
+        await operatorWebFetch(url, resolve(Global.Path.data, "nexus-runtime"), input.raw, signal).then((response) => {
+          process.stderr.write(response.status + "\n")
+          process.stdout.write(response.body)
+        }, reportError)
+      })
+    }
     const server = yield* ServerConnection.resolve({ mismatch: "ignore" })
     const nexus = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
       .experimental.nexus
+    if (input.action === "jobs") {
+      if (Option.isNone(input.prompt))
+        return yield* Effect.fail(new Error("Use opencode nexus jobs CONVERSATION [ACTION ...]."))
+      const conversation = input.prompt.value
+      return yield* Effect.tryPromise(async () => {
+        const { runJobs } = await import("@opencode/nexus-runtime/jobs")
+        await runJobs(
+          conversation,
+          input.words,
+          {
+            workspace: Option.getOrUndefined(input.workspace),
+            model: Option.getOrUndefined(input.model),
+            json: input.outputFormat === "json",
+          },
+          (command) =>
+            nexus.manage({
+              "x-nexus-origin": process.env.NEXUS_URL,
+              "x-nexus-member-token": process.env.NEXUS_MEMBER_TOKEN,
+              payload: command as Parameters<typeof nexus.manage>[0]["payload"],
+            }),
+        ).then((result) => process.stdout.write(result + "\n"), reportError)
+      })
+    }
     if (input.action === "run") {
       return yield* Effect.tryPromise(async () => {
         const stop = new AbortController()
@@ -356,3 +393,8 @@ export default Runtime.handler(
     process.stdout.write(JSON.stringify(result, null, 2) + "\n")
   }),
 )
+
+function reportError(error: unknown) {
+  process.stderr.write((error instanceof Error ? error.message : String(error)) + "\n")
+  process.exitCode = 1
+}
