@@ -253,6 +253,10 @@ Returns: `{ data: Permission.Request }`
 
 ## Types
 
+- `Connection.CredentialInfo`: `{ type: "credential"; id: string; label: string; method: "key" | "oauth" | "external"; status?: Connection.Status }`
+- `Connection.EnvInfo`: `{ type: "env"; name: string; status?: Connection.Status }`
+- `Connection.Info`: `Connection.CredentialInfo | Connection.EnvInfo`
+- `Connection.Status`: `{ status: "needs_auth"; message: string; url?: string }`
 - `FileDiff.Info`: `{ file: string; patch: string; additions: number; deletions: number; status: "added" | "deleted" | "modified"; more?: true }`
 - `Form.BooleanField`: `{ key: string; title?: string; description?: string; required?: boolean; hidden?: boolean; when?: Form.When[]; type: "boolean"; default?: boolean }`
 - `Form.Detail`: `{ id: string; sessionID: string; title: string; metadata?: Record<string, unknown>; fields: Form.Fields; state: Form.State }`
@@ -281,6 +285,8 @@ Returns: `{ data: Permission.Request }`
 - `Prompt.SkillAttachment`: `{ id: string; name: string; text?: string; mention?: Prompt.Mention }`
 - `PromptInput.FileAttachment`: `{ uri: string; source?: Prompt.FileSource; name?: string; description?: string; mention?: Prompt.Mention }`
 - `PromptInput.SkillAttachment`: `{ id: string; mention?: Prompt.Mention }`
+- `Session.Error.ConnectionFallbackRecovery`: `{ type: "connection-fallback"; integrationID: string; previous: Connection.Info; promoted: Connection.Info; unavailableUntil: number }`
+- `Session.Error.Recovery`: `Session.Error.ConnectionFallbackRecovery`
 - `Session.Inbox.Compaction`: `{ id: string; sessionID: string; time: { created }; type: "compaction"; payload: unknown; delivery: "steer" | "queue" }`
 - `Session.Inbox.Info`: `Session.Inbox.User | Session.Inbox.Synthetic | Session.Inbox.Compaction | Session.Inbox.Move`
 - `Session.Inbox.Move`: `{ id: string; sessionID: string; time: { created }; type: "move"; delivery: "steer" | "queue"; payload: Session.Inbox.MovePayload }`
@@ -305,7 +311,7 @@ Returns: `{ data: Permission.Request }`
 - `Session.Message.Synthetic`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; text: string; description?: string; type: "synthetic" }`
 - `Session.Message.System`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; type: "system"; text: string; description?: string }`
 - `Session.Message.User`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; text: string; files?: Prompt.FileAttachment[]; agents?: Prompt.AgentAttachment[]; skills?: Prompt.SkillAttachment[]; type: "user" }`
-- `Session.StructuredError`: `{ type: string; message: string; status?: number; response?: { body }; retryAfterMs?: number }`
+- `Session.StructuredError`: `{ type: string; message: string; status?: number; response?: { body }; retryAfterMs?: number; recovery?: Session.Error.Recovery }`
 - `SessionGenerateResponse`: `{ data: { text, tokens, cost } }`
 - `SessionInterruptResponse`: `{ interrupted: boolean }`
 - `SessionMessagesResponse`: `{ data: Session.Message.Info[]; cursor: { previous, next } }`

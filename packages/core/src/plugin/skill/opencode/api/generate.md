@@ -31,6 +31,8 @@ Body:
 - `n?: number`
 - `aspect?: string` Aspect ratio as width:height, for example 16:9
 - `resolution?: Generate.ImageResolution`
+- `providerOptions?: Record<string, unknown>`
+- `mask?: Generate.File`
 
 Returns: `GenerateImageResponse`
 
