@@ -339,6 +339,15 @@ test("Until restart recovery proves the original materialization and scans past 
     expect(await new Until(fixture.client, "another-owner").recover(candidate)).toBeUndefined()
     expect(await restarted.recover({ ...candidate, public_id: "different-run" })).toBeUndefined()
     expect(state.appended).toBe(1)
+    const recovered = new Until(fixture.client, "owner")
+    run.tasks = [
+      ...run.tasks,
+      { ...run.tasks.find((task) => task.key === "check-1")!, key: "check-2", status: "waiting" },
+    ]
+    run.attention = { reason: "needs_approval", blocked_task_keys: ["check-2"], blocked_task_overflow: null }
+    await recovered.recover(candidate)
+    expect(recovered.progress("workspace", run)).toEqual({ checks: 1, attempts: policy.attempts })
+    expect(recovered.progress("other", run)).toBeNull()
   } finally {
     fixture.server.stop(true)
   }

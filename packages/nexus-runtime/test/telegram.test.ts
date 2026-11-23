@@ -212,7 +212,7 @@ function fixture(group = true) {
       }
       return Response.json(
         {
-          schedule: { ...body, public_id: "job", workspace_public_id: "workspace", status: "active", lock_version: 0 },
+          schedule: { ...body, public_id: "job", workspace_public_id: "workspace", wake: "auto", status: "active", lock_version: 0 },
         },
         { status: 201 },
       )
@@ -225,6 +225,7 @@ function fixture(group = true) {
           ...scheduleEdits.at(-1),
           public_id: "job",
           workspace_public_id: "workspace",
+          wake: "auto",
           status: "active",
           lock_version: scheduleEdits.length,
         },
@@ -235,6 +236,7 @@ function fixture(group = true) {
         schedule: {
           public_id: "job",
           workspace_public_id: "workspace",
+          wake: "auto",
           prompt: "Job",
           rule: { kind: "interval", every_seconds: 60 },
           status: "paused",
@@ -1409,6 +1411,7 @@ test("Telegram resumes occurrence polling after a lost page and keeps pending oc
     variant_public_id: null,
     run_public_id: null,
     status: i === 100 ? "queued" : "canceled",
+    wake: "auto",
     scheduled_for: new Date(now).toISOString(),
     created_at: new Date(now).toISOString(),
   }))
@@ -1457,6 +1460,7 @@ test("Telegram history binds task controls to the occurrence before the next pol
     variant_public_id: "child-variant",
     run_public_id: "child-run",
     status: "running",
+    wake: "auto",
     scheduled_for: new Date(now).toISOString(),
     created_at: new Date(now).toISOString(),
   }))

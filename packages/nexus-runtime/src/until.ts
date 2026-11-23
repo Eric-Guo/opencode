@@ -231,6 +231,18 @@ export class Until {
     private readonly timeoutSeconds: number | (() => number) = 120,
   ) {}
 
+  progress(workspace: string, run: Run) {
+    const row = this.gates.get(run.public_id)
+    if (!row || row.workspace !== workspace) return null
+
+    // A later check is appended only after the preceding attempt has a verdict.
+    const prior = run.tasks
+      .filter((task) => task.kind === "tool_task" && task.key.startsWith("check-"))
+      .map((task) => attemptOf(task.key) - 1)
+    const checks = Math.max(0, ...prior, ...row.gate.checks.map((check) => check.attempt))
+    return { attempts: row.gate.policy.attempts, checks }
+  }
+
   async prepare(workspace: string, conversation: string, policy: UntilPolicy) {
     const prepared = this.plan(policy)
     await this.save(workspace, conversation, policy)
