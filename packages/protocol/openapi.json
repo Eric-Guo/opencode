@@ -9536,14 +9536,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "path",
@@ -16801,14 +16803,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -16913,14 +16917,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -18377,6 +18383,238 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["inference.create"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "workload": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "decision",
+                              "text_generation",
+                              "embedding",
+                              "image_generation",
+                              "speech_generation",
+                              "transcription"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "input": {},
+                      "live": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "configuration": {
+                        "anyOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reasoning_effort": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reasoning_enabled": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "upload_public_ids": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "billing_subject": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "fallback_models": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "model_selection": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": ["default", "inherited", "explicit"]
+                              },
+                              "model": {
+                                "type": "string"
+                              },
+                              "constraint": {
+                                "type": "string",
+                                "enum": ["any", "model", "provider", "route"]
+                              },
+                              "alternatives": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["source", "model", "constraint"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "key", "model", "input"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["inference.list"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["inference.subscribe", "inference.unsubscribe"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "request": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "request"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["workspace.list"]
                       }
                     },
@@ -18535,6 +18773,17 @@
                       "access_token",
                       "executor_access_token"
                     ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.tools"]
+                      }
+                    },
+                    "required": ["action"],
                     "additionalProperties": false
                   },
                   {
@@ -19727,7 +19976,14 @@
                         "minLength": 1
                       },
                       "model": {
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "speaker": {
                         "type": "string"
@@ -20177,6 +20433,31 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "environment": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "root": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "directories": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": ["root"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     },
                     "required": ["action", "key"],
@@ -20279,6 +20560,9 @@
                         "anyOf": [
                           {
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
                           },
                           {
                             "type": "null"
@@ -20892,7 +21176,14 @@
                         ]
                       },
                       "prompt": {
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "rule": {
                         "anyOf": [
@@ -20945,11 +21236,14 @@
                             },
                             "required": ["kind", "local_time", "time_zone"],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
                           }
                         ]
                       }
                     },
-                    "required": ["action", "conversation", "id", "version", "prompt", "rule"],
+                    "required": ["action", "conversation", "id", "version"],
                     "additionalProperties": false
                   },
                   {
@@ -22343,12 +22637,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "target",
