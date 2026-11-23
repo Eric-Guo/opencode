@@ -1,5 +1,69 @@
-import type { ScheduleRuleInput } from "@cybros/agent"
+import type { ScheduleExecutionPage, ScheduleRuleInput } from "@cybros/agent"
 import type { NexusApplication } from "./application"
+import type { StoreDocument } from "./document"
+import type { TelegramState } from "./telegram-state"
+
+const settled = new Set(["completed", "failed", "canceled"])
+
+type Job = NonNullable<TelegramState["jobs"]>[number]
+
+/** Save the occurrences and their poll position together. An operator's history read can start at any cursor. */
+export async function recordJobExecutions(
+  document: StoreDocument<TelegramState>,
+  job: Job,
+  page: ScheduleExecutionPage,
+  poll?: { after?: string },
+) {
+  if (!page.items.length) return
+
+  await document.change((state) => {
+    const work = [...state!.work]
+    const indexes = new Map(work.map((row, index) => [row.input, index]))
+
+    for (const row of page.items) {
+      if (!row.input_public_id) continue
+
+      const index = indexes.get(row.input_public_id) ?? work.length
+      const previous = work[index]
+      indexes.set(row.input_public_id, index)
+      work[index] = {
+        ...previous,
+        id: previous?.id ?? "scheduled:" + row.input_public_id,
+        route: job.route,
+        target: { workspace: job.target.workspace, conversation: row.child_conversation_public_id },
+        requester: job.requester,
+        speaker: job.speaker,
+        source: previous?.source ?? [],
+        input: row.input_public_id,
+        voice: previous?.voice ?? false,
+        worker: true,
+        schedule: job.id,
+        ...(row.turn_public_id &&
+          (row.variant_public_id || row.run_public_id) && {
+            execution: {
+              turn_public_id: row.turn_public_id,
+              variant_public_id: row.variant_public_id,
+              run_public_id: row.run_public_id,
+            },
+          }),
+        ...(row.status === "canceled" && !row.turn_public_id && { terminal: true }),
+      }
+    }
+
+    const cursor =
+      poll && page.items.every((row) => row.run_public_id || settled.has(row.status)) ? page.last_cursor : null
+
+    return {
+      ...state!,
+      work,
+      ...(cursor && {
+        jobs: state!.jobs?.map((item) =>
+          item.id === job.id && item.execution_after === poll?.after ? { ...item, execution_after: cursor } : item,
+        ),
+      }),
+    }
+  })
+}
 
 export function telegramTime(expression: string, now: number) {
   const match = /^(now|in|at)(?:\s+([\s\S]+))?$/.exec(expression)
@@ -99,10 +163,19 @@ export async function telegramJob(
     throw new Error("Use /job " + action + " ID" + (action === "edit" ? " prompt TEXT or RULE." : "."))
 
   if (action === "show") return { text: JSON.stringify(await schedules.fetch(id, options), null, 2) }
-  if (action === "history")
-    return {
-      text: JSON.stringify(await schedules.executions(id, tail ? { after: tail } : {}, options), null, 2),
-    }
+  if (action === "history") {
+    const page = await schedules.executions(id, { after: tail || undefined, limit: 25 }, options)
+    const lines = page.items.map((row) =>
+      [
+        row.input_public_id ? "Task: " + row.input_public_id : "Scheduled execution",
+        row.status,
+        row.scheduled_for,
+      ].join(" · "),
+    )
+    if (page.next_after) lines.push("More: /job history " + id + " " + page.next_after)
+
+    return { text: lines.join("\n") || "No executions yet.", executions: page }
+  }
   if (!context.owner) return { text: "Only the Bot owner can change scheduled jobs." }
   if (command.create) {
     const policy = await context.application.bots.capture({

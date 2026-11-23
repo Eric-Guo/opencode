@@ -3,10 +3,10 @@
 import { setTimeout } from "node:timers/promises"
 import { OpenCode } from "@opencode/client/promise"
 import { $, Glob, which } from "bun"
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
 import { Schema } from "effect"
 import { Service, fallback, type Endpoint } from "@opencode/client/service"
-import { developmentHelp, parseDevelopment, runDevelopment } from "./terminal"
+import { developmentHelp, formatAdaptationInspection, parseDevelopment, runDevelopment } from "./terminal"
 
 /** A source-only terminal for the enabled dev extension. Discovery never starts or replaces the service. */
 export async function main(args = process.argv.slice(2)) {
@@ -18,6 +18,31 @@ export async function main(args = process.argv.slice(2)) {
   }
   const endpoint = await installedService()
 
+  if (!endpoint && parsed.verb === "adaptations") {
+    const { Global } = await import("@opencode/util/global")
+    const { Adaptations } = await import("../src/adaptations")
+    const { ApplicationSettings, readConnectionSettings } = await import("../src/settings")
+    const storage = join(Global.Path.data, "nexus-runtime")
+    const settings = new ApplicationSettings(join(storage, "application-settings.json"))
+    await settings.restore()
+
+    const values = settings.read()
+    const boot = values.default_model ?? (await readConnectionSettings(storage))?.model
+    const pack = await Adaptations.load(values, storage, boot)
+    const model = parsed.text("model") ?? boot
+    process.stdout.write(
+      formatAdaptationInspection(
+        {
+          model: model ?? null,
+          adaptations: pack.facts(model),
+          facts: null,
+          catalog_error: "OpenCode service offline",
+        },
+        parsed.values.json === true,
+      ),
+    )
+    return 0
+  }
   if (!endpoint)
     throw new Error("No elected OpenCode service is available. Start OpenCode before using development controls.")
 

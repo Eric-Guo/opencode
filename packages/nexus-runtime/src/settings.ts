@@ -1,9 +1,26 @@
 import { mkdir, readFile } from "node:fs/promises"
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
 import { Schema } from "effect"
 import { Toolsets } from "@cybros/agent"
 import { NexusSettings } from "@opencode/schema/nexus-settings"
 import { atomic, missing } from "./storage"
+
+const Settings = Schema.Struct({
+  origin: Schema.String,
+  identifier: Schema.String,
+  directory: Schema.String,
+  workspace: Schema.String,
+  model: Schema.String,
+})
+
+export type Settings = typeof Settings.Type
+export async function readConnectionSettings(directory: string) {
+  const text = await readFile(join(directory, "settings.json"), "utf8").catch((error) => {
+    if (missing(error)) return undefined
+    throw error
+  })
+  return text ? Schema.decodeUnknownSync(Schema.fromJsonString(Settings))(text) : undefined
+}
 
 export const defaultSettings: NexusSettings.Values = {
   default_model: null,
