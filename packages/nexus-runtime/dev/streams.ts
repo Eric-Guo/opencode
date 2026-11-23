@@ -26,6 +26,9 @@ const StreamCommand = Schema.Union([
 const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))
 const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))
 type Follower = {
+  workspace: string
+  turn: string | null
+  variant: string | null
   run: string | null
   conversation: string | null
   events: { sequence: number; value: JsonObject; bytes: number }[]
@@ -53,6 +56,24 @@ export class DevelopmentStreams {
 
   followedRuns() {
     return [...this.followers.values()].flatMap((row) => (row.run ? [row.run] : []))
+  }
+
+  async observations() {
+    const app = this.application()
+    return Promise.all(
+      [...this.followers.values()].map(async (row) => {
+        const identity = { run: row.run, conversation: row.conversation, attached: row.attached }
+        if (row.run)
+          return { ...identity, ...(await app.operations.followerRun(row.workspace, row.run, { signal: this.signal })) }
+
+        const turn = await app.client
+          .workspace(row.workspace)
+          .conversation(row.conversation!)
+          .turns.variants(row.turn!, { signal: this.signal })
+        const variant = turn.items.find((item) => item.public_id === row.variant)
+        return { ...identity, status: variant?.status ?? "unavailable" }
+      }),
+    )
   }
 
   async command(value: unknown): Promise<JsonValue> {
@@ -110,15 +131,11 @@ export class DevelopmentStreams {
 
   private async follow(target: string | typeof DirectReply.Type, live: boolean) {
     const application = this.application()
+    const workspace = await application.identity.workspace
     const run = typeof target === "string" ? target : null
     const turn =
       typeof target === "string"
-        ? (
-            await application.client
-              .workspace(application.identity.workspace)
-              .run(target)
-              .fetch({ signal: this.signal })
-          ).turn
+        ? (await application.client.workspace(workspace).run(target).fetch({ signal: this.signal })).turn
         : { public_id: target.turn, conversation_public_id: target.conversation }
     const key = typeof target === "string" ? target : target.variant
     const existing = this.followers.get(key)
@@ -133,6 +150,9 @@ export class DevelopmentStreams {
     const jobs: Promise<void>[] = []
     let observingLive = false
     const row: Follower = {
+      workspace,
+      turn: turn?.public_id ?? null,
+      variant: typeof target === "string" ? null : target.variant,
       run,
       conversation: turn?.conversation_public_id ?? null,
       events: [],
@@ -199,7 +219,7 @@ export class DevelopmentStreams {
       let reconnecting = false
       while (!active.aborted) {
         try {
-          const subscription = await socket[methods[channel]](application.identity.workspace, row.conversation ?? key, {
+          const subscription = await socket[methods[channel]](workspace, row.conversation ?? key, {
             signal: active,
           })
           if (reconnecting && channel === "transcript") push({ channel: "resync" })
