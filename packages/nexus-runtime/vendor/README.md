@@ -1,7 +1,10 @@
-The archive is the MIT-licensed public SDK from cybros.ai2 revision
-`12399bf520f2063e569f264580b7b1be5f25f38c`, built in `sdks/typescript` with
-`pnpm run build` and packed with `npm pack --ignore-scripts`. The package includes
-its upstream license. Both the runtime and the Nexus desktop bridge consume this archive.
+The runtime and desktop bridge use the MIT-licensed `@cybros/agent` SDK
+from `sdks/typescript` in Cybros revision `0dac9b6b09758458379b06c8d80790f4dd035deb`,
+which adds the lifecycle selector on `RealtimeClient.inferenceEvents`.
+Build that source with `pnpm run build`, run `npm pack --ignore-scripts`,
+and rename the output to `cybros-agent-0.1.0-lifecycle.tgz`.
+The filename distinguishes the archive in Bun's installation cache.
+The upstream license is included.
 
 The packed runtime bundles this SDK directly. Its checkpoint helper sends a
 64-character SHA-256 key for each lookup or restore. It requires a Nexus server

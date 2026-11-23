@@ -3369,6 +3369,43 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | {
+        readonly action: "inference.create"
+        readonly workspace?: string | undefined
+        readonly key: string
+        readonly model: string
+        readonly workload?:
+          | "decision"
+          | "text_generation"
+          | "embedding"
+          | "image_generation"
+          | "speech_generation"
+          | "transcription"
+          | undefined
+        readonly input: Schema.MutableJson
+        readonly live?: boolean | undefined
+        readonly configuration?: { readonly [x: string]: Schema.MutableJson } | null | undefined
+        readonly reasoning_effort?: string | null | undefined
+        readonly reasoning_enabled?: boolean | null | undefined
+        readonly upload_public_ids?: ReadonlyArray<string> | null | undefined
+        readonly billing_subject?: string | null | undefined
+        readonly fallback_models?: ReadonlyArray<string> | null | undefined
+        readonly model_selection?:
+          | {
+              readonly source: "default" | "inherited" | "explicit"
+              readonly model: string
+              readonly constraint: "any" | "model" | "provider" | "route"
+              readonly alternatives?: ReadonlyArray<string> | undefined
+            }
+          | null
+          | undefined
+      }
+    | { readonly action: "inference.list"; readonly workspace?: string | undefined }
+    | {
+        readonly action: "inference.subscribe" | "inference.unsubscribe"
+        readonly workspace?: string | undefined
+        readonly request: string
+      }
     | { readonly action: "workspace.list" }
     | { readonly action: "workspace.create"; readonly name: string; readonly key: string }
     | { readonly action: "workspace.use"; readonly workspace: string }
