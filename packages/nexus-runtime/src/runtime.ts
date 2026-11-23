@@ -796,6 +796,8 @@ export class NexusRuntime {
           await Promise.allSettled([inbox, following, lifecycle])
         }
       } catch (cause) {
+        // Registration can fail after the application accepts commands and before its watchers start.
+        await this.connection?.application.inference.close()
         await this.extensionManager?.emit("member.disconnected", {})
         this.connection = undefined
         this.failed(cause)
@@ -1272,6 +1274,15 @@ export class NexusRuntime {
 
     const active = this.connection
     if (!active || !this.settings) throw new Error("Nexus is disconnected.")
+    if (
+      command.action === "inference.create" ||
+      command.action === "inference.list" ||
+      command.action === "inference.subscribe" ||
+      command.action === "inference.unsubscribe"
+    ) {
+      if (token) throw new Error("Inference management uses the paired Agent credential.")
+      return active.application.inference.command(command.workspace ?? active.identity.workspace, command)
+    }
     if (command.action === "workspace.list")
       return { items: await active.application.workspaces.list(), selected: active.identity.workspace }
     if (command.action === "workspace.create")

@@ -23,6 +23,7 @@ import { Operations } from "./operations"
 import { addressedAgent, foreignInput } from "./foreign-admission"
 import type { McpDirectory, PresetInventory } from "./preset-mcp"
 import { MemoryReviews } from "./memory-review"
+import { InferenceFollowers } from "./inference"
 import { Until, untilParagraph } from "./until"
 import { TurnLifecycle } from "./turn-lifecycle"
 import { boundRootDescription, Environments } from "./environments"
@@ -73,6 +74,7 @@ export type ApplicationInput = {
 
 /** Surface-independent admission and following. Nexus remains the durable execution owner. */
 export class NexusApplication {
+  readonly inference: InferenceFollowers
   readonly titles: ConversationTitles
   readonly operations: Operations
   readonly presets: Presets
@@ -111,6 +113,7 @@ export class NexusApplication {
     } = () => ({ code_mode: true, subagent: true, title_model: null }),
     admissionDirectory?: string,
   ) {
+    this.inference = new InferenceFollowers(member, realtimeFactory)
     this.titles = new ConversationTitles(member, () => this.defaults().title_model)
     this.environments = new Environments(member, identity)
     this.runners = new Runners(member, identity.runner)
@@ -196,7 +199,7 @@ export class NexusApplication {
     } finally {
       stopped.abort()
       await Promise.allSettled(observers)
-      await this.titles.close()
+      await Promise.all([this.titles.close(), this.inference.close()])
     }
   }
 
