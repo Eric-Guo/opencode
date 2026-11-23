@@ -11,7 +11,7 @@ import { ExtensionManager } from "../src/extension-manager"
 import { workerRegistration } from "../src/worker-extension"
 import { runDevelopment } from "../dev/terminal"
 import { storeFixture } from "./fixture/store"
-import { conversationFixture } from "./fixture/conversation"
+import { conversationFixture, turnFixture } from "./fixture/conversation"
 import descriptor from "../dev/extension.json"
 
 const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))
@@ -31,7 +31,51 @@ test("the real development extension preserves SDK methods, live iterators, iden
       requests.push(request.method + " " + new URL(request.url).pathname)
       expect(request.headers.get("authorization")).toBe("Bearer fixture")
       if (server.upgrade(request, { headers: { "Sec-WebSocket-Protocol": "actioncable-v1-json" } })) return
-      if (new URL(request.url).pathname.endsWith("/conversations/side"))
+      const url = new URL(request.url)
+      if (url.pathname.endsWith("/runs")) {
+        expect(url.searchParams.get("answering_user_public_id")).toBeNull()
+        expect(url.searchParams.get("order")).toBe("desc")
+        expect(url.searchParams.get("limit")).toBe("25")
+        expect(url.searchParams.get("attention")).toBe("any")
+        expect(url.searchParams.get("status")).toBe("running")
+        return Response.json({
+          runs: url.searchParams.has("after")
+            ? []
+            : [
+                { public_id: "run", status: "running" },
+                {
+                  public_id: "peer-run",
+                  status: "running",
+                  turn: { status: "running", conversation_public_id: "peer-conversation" },
+                },
+                {
+                  public_id: "side-run",
+                  status: "running",
+                  turn: { status: "running", conversation_public_id: "side" },
+                },
+              ],
+          pagination: { next_after: url.searchParams.has("after") ? null : "next" },
+        })
+      }
+      if (url.pathname.endsWith("/profile/agents")) return Response.json({ agents: [] })
+      if (url.pathname.endsWith("/conversations"))
+        return Response.json({ conversations: [], pagination: { next_after: null } })
+      if (url.pathname.endsWith("/conversations/side/turns"))
+        return Response.json({
+          turns: [
+            turnFixture(1, {
+              kind: "direct_reply",
+              active_variant: {
+                public_id: "variant",
+                source: "original",
+                status: "running",
+                run_public_id: "side-run",
+              },
+            }),
+          ],
+          pagination: { before_position: null, after_position: null },
+        })
+      if (url.pathname.endsWith("/conversations/side"))
         return Response.json({
           conversation: conversationFixture({ public_id: "side", side: true, source_conversation_public_id: "main" }),
         })
@@ -146,6 +190,20 @@ test("the real development extension preserves SDK methods, live iterators, iden
     ])
     expect(application.lifecycle.hostsSnapshot()).toEqual([])
     application.lifecycle.adopt("workspace", "side")
+    const list = { action: "runs", attention: "any", status: "running" }
+    expect(await manager.command("dev", list)).toMatchObject({
+      items: [{ followed: true }, { followed: false }, { public_id: "side-run", followed: false }],
+    })
+    await application.lifecycle.tick(AbortSignal.timeout(2000))
+    expect(await manager.command("dev", list)).toMatchObject({
+      items: [
+        { public_id: "run", followed: true },
+        { public_id: "peer-run", followed: false },
+        { public_id: "side-run", followed: true },
+      ],
+      next_after: "next",
+    })
+    expect(await manager.command("dev", { ...list, after: "next" })).toMatchObject({ items: [], next_after: null })
     expect(await manager.command("dev", { action: "followers" })).toMatchObject({ conversations: [] })
     expect(await manager.command("dev", { action: "followers", side: true })).toMatchObject({
       conversations: [{ public_id: "side", parent: "main" }],
