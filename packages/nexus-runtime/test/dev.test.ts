@@ -1740,3 +1740,89 @@ test("development task and watch output identify the MCP callable, account and c
     expect(output.join("")).toContain("research_write [MCP work · Research · write]")
   }
 })
+
+test("task and call_tool render task facts and captures once and retain the SDK document in JSON", async () => {
+  const detail: JsonObject = {
+    task: {
+      key: "capture",
+      kind: "tool_task",
+      tool_name: "capture",
+      status: "completed",
+      approval: { origin: "human", decided_by: "operator", decided_at: "today" },
+    },
+    tool_input: { path: "plot.png" },
+    title: "Plot",
+    metadata: { checkpoint: "before" },
+    structured_content: false,
+    output: "saved",
+    content: [
+      { type: "text", text: "saved" },
+      { type: "future_block", value: "retained in JSON" },
+      { type: "resource_link", name: "plot.png", mimeType: "image/png", size: 0, uri: "nexus://uploads/one" },
+    ],
+  }
+  const relay = { public_id: "run", task: detail }
+  for (const args of [
+    ["task", "run", "capture"],
+    ["call_tool", "runner", "capture"],
+  ]) {
+    const lines: string[] = []
+    const terminal = {
+      signal: new AbortController().signal,
+      command: async (input: JsonObject): Promise<JsonValue> => {
+        if (input.action === "target") return { workspace: "workspace", conversation: null, run: "run", side: false }
+        return input.action === "call_tool" ? relay : detail
+      },
+      write: (value: string | Uint8Array) => lines.push(String(value)),
+      error: () => {},
+    }
+    expect(await runDevelopment(args, terminal)).toBe(0)
+    expect(lines.join("").trim().split("\n")).toEqual([
+      ...(args[0] === "call_tool" ? ["run: run"] : []),
+      "task: capture (tool_task) completed",
+      "tool: capture",
+      'input: {"path":"plot.png"}',
+      "approval: human (operator) at today",
+      "title: Plot",
+      'metadata: {"checkpoint":"before"}',
+      "structure: false",
+      "saved",
+      "link: plot.png (image/png, 0 B) one",
+    ])
+    lines.length = 0
+    await runDevelopment([...args, "--json"], terminal)
+    expect(JSON.parse(lines.join(""))).toEqual(args[0] === "call_tool" ? relay : detail)
+  }
+
+  const failure = {
+    task: {
+      key: "call",
+      kind: "tool_task",
+      status: "failed",
+      error: { key: "approval_denied", detail: "Use a different input" },
+    },
+    content: "refused",
+    output: "refused",
+  }
+  for (const args of [
+    ["task", "run", "call"],
+    ["call_tool", "runner", "call"],
+  ]) {
+    const output: string[] = []
+    const code = await runDevelopment(args, {
+      signal: new AbortController().signal,
+      command: async (input): Promise<JsonValue> =>
+        input.action === "target"
+          ? { workspace: "w", conversation: null, run: "run", side: false }
+          : input.action === "call_tool"
+            ? { public_id: "run", task: failure }
+            : failure,
+      write: (value) => output.push(String(value)),
+      error: () => {},
+    })
+    expect(code).toBe(args[0] === "call_tool" ? 1 : 0)
+    expect(output.join("")).toContain(
+      "task: call (tool_task) failed\nerror: approval_denied — Use a different input\nrefused\n",
+    )
+  }
+})
