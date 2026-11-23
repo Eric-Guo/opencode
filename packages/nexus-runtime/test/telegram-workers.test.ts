@@ -32,7 +32,7 @@ const variant = {
   attachments: [{ public_id: "upload", filename: "result.txt", content_type: "text/plain", byte_size: 10 }],
 }
 
-test("Telegram keeps canonical worker completion separate from the parent's original report destination", async () => {
+test.each(["foreground", "scheduled"])("Telegram routes canonical %s results and parent reports", async (origin) => {
   const requests: string[] = []
   const state = { newer: false }
   const service = storeFixture((request) => {
@@ -116,7 +116,7 @@ test("Telegram keeps canonical worker completion separate from the parent's orig
                 input_public_id: "callback",
                 origin: "background",
                 sender_conversation_public_id: "parent",
-                sender_run_public_id: "root-run",
+                sender_run_public_id: origin === "scheduled" ? null : "root-run",
                 sender_task_key: "spawn",
                 result: {
                   conversation_public_id: "child",
@@ -154,7 +154,25 @@ test("Telegram keeps canonical worker completion separate from the parent's orig
       "bot",
       Schema.decodeUnknownSync(TelegramState),
     )
-    await document.change(() => ({ ...telegramState(), work: [{ ...owner, result_route: destination }] }))
+    await document.change(() =>
+      origin === "scheduled"
+        ? {
+            ...telegramState(),
+            jobs: [{ id: "job", requester: owner.requester, speaker: owner.speaker, route, target }],
+            work: [
+              {
+                ...owner,
+                id: "scheduled:worker-input",
+                input: "worker-input",
+                schedule: "job",
+                worker: true,
+                target: { ...target, conversation: "child" },
+                execution: { turn_public_id: "worker-turn", variant_public_id: "result", run_public_id: "worker-run" },
+              },
+            ],
+          }
+        : { ...telegramState(), work: [{ ...owner, result_route: destination }] },
+    )
     await telegramWorkers(document, app, AbortSignal.timeout(2000))
     const registered = (await document.read())!
     expect(registered.work.find((row) => row.worker)?.canonical?.variant_public_id).toBe("result")
