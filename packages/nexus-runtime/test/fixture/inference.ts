@@ -1,0 +1,20 @@
+export const queuedInference = {
+  public_id: "one",
+  status: "queued",
+  workload: "text_generation",
+  model: { provider_id: "fixture", model_ref: "model" },
+  created_at: "2026-11-23T00:00:00Z",
+  updated_at: "2026-11-23T00:00:00Z",
+  usage_summary: {
+    request_count: 0,
+    input_tokens: 0,
+    cache_read_tokens: 0,
+    uncached_input_tokens: 0,
+    cache_creation_tokens: 0,
+    output_tokens: 0,
+    reasoning_tokens: 0,
+    total_tokens: 0,
+    cost_amount: "0",
+    cost_complete: true,
+  },
+}

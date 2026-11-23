@@ -7,6 +7,7 @@ import { NexusRuntime } from "../src/runtime"
 import { executorFixture } from "./fixture/executor"
 import { atomic } from "../src/storage"
 import { Schema } from "effect"
+import { queuedInference } from "./fixture/inference"
 import { conversationFixture } from "./fixture/conversation"
 
 const Declaration = Schema.Struct({
@@ -202,6 +203,10 @@ test.each([
         state: runtime.status().state,
       })
 
+      if (path === "/agent_api/v1/workspaces/workspace/inference_requests" && request.method === "POST") {
+        expect(request.headers.get("idempotency-key")).toBe("existing-request")
+        return Response.json({ inference_request: { ...queuedInference, result: { status: "completed", output_text: "done" } } })
+      }
       if (transfer && path.startsWith("/agent_api/v1/executor/inbox"))
         return fetch(new URL(path + url.search, transfer.server.url), {
           method: request.method,
@@ -436,6 +441,7 @@ test.each([
               workspace_public_id: "workspace",
               conversation_public_id: "conversation",
               prompt: "Review",
+              wake: "auto",
               rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
               status: "active",
               lock_version: 0,
@@ -565,6 +571,19 @@ test.each([
         starting: 0,
       })
       if ("apiKey" in fixture) {
+        expect(await runtime.manage({ action: "inference.list" })).toEqual([])
+        await expect(runtime.manage({ action: "inference.list" }, nexus.url.origin, "human")).rejects.toThrow(
+          "paired Agent credential",
+        )
+        await expect(runtime.manage({ action: "inference.subscribe", request: "missing" })).rejects.toThrow(
+          "not following",
+        )
+        const accepted = await runtime.manage({
+          action: "inference.create", model: "fixture/model", key: "existing-request", input: "hello",
+        })
+        expect(accepted).toMatchObject({ public_id: queuedInference.public_id, complete: true, text: "done" })
+        expect(await runtime.manage({ action: "inference.list" })).toEqual([accepted])
+        expect(await runtime.manage({ action: "inference.list", workspace: "other" })).toEqual([])
         expect(
           await runtime.manage({
             action: "application.operation",

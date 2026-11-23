@@ -254,7 +254,55 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     terminal.write(formatAdaptationInspection(result, parsed.values.json === true))
     return 0
   }
-  if (["providers", "models", "rules", "followers"].includes(parsed.verb)) {
+  if (parsed.verb === "followers") {
+    const result = await call("followers", { side: parsed.values.side === true })
+    if (parsed.values.json) print(result)
+    else {
+      const lists = object(result)
+      const conversations = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(lists.conversations)
+      const runs = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(lists.runs)
+      const rows = [...conversations, ...runs]
+      if (!rows.length) terminal.write("(this service is following no hosts)\n")
+      for (const row of rows) {
+        const until = row.until && object(row.until)
+        const reason = row.attention && object(row.attention).reason
+        terminal.write(
+          [
+            row.public_id ?? row.run ?? row.conversation,
+            row.status,
+            reason && "ASKING: " + reason,
+            until && "until " + until.checks + "/" + until.attempts,
+            row.parent && "side of " + row.parent,
+            row.failure_reason,
+          ]
+            .filter(Boolean)
+            .join("  ") + "\n",
+        )
+      }
+    }
+    return 0
+  }
+  if (parsed.verb === "providers") {
+    const result = await call("providers")
+    if (parsed.values.json) print(result)
+    else {
+      const rows = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(result)
+      if (!rows.length) terminal.write("(this server serves no provider lanes)\n")
+      for (const row of rows)
+        terminal.write(
+          [
+            row.id,
+            row.credentials,
+            row.enabled ? "enabled" : "disabled",
+            row.configured ? "configured" : "unconfigured",
+            row.models + " models",
+            row.unavailable_until ? "unavailable until " + row.unavailable_until : "—",
+          ].join("  ") + "\n",
+        )
+    }
+    return 0
+  }
+  if (["models", "rules"].includes(parsed.verb)) {
     print(
       await call(parsed.verb, {
         attention: parsed.text("attention"),

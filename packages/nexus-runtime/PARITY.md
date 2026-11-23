@@ -13,9 +13,41 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The latest review covers [scheduled executions and adaptation inspection](#scheduled-executions-and-adaptation-inspection).
+tests below. The latest review covers [standalone inference and follower inspection](#standalone-inference-and-follower-inspection).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Standalone inference and follower inspection
+
+Reviewed November 23, 2026 against Cybros `4053db620` from OpenCode
+`f6fe5642d8d`. The [reference contract table](#reference-contract-anchors)
+identifies the TypeScript owners for all eleven executable runtime packages.
+
+| Rho entry point | OpenCode behavior | Regression coverage |
+| --- | --- | --- |
+| `rho` Ops inference requests and `InferenceRequestRun` | Four commands on `experimental.nexus.manage` create, list and change subscriptions. The paired Agent submits the caller's key, workload, model controls, uploads and billing subject. Replays adopt the same request within its workspace. Connection replacement drains admitted creates and retires the old followers. | `test/inference.test.ts`, `test/runtime.test.ts` |
+| `rho` inference event and result followers | A shared SDK socket carries full or lifecycle subscriptions. Switching replays the saved cursor. Rollback clears the preview. A terminal event wakes an HTTP read, and independent polling recovers the terminal resource when the wake is lost or event history has expired. | `test/inference.test.ts`, SDK `test/runtime.mjs` |
+| `rho-dev` followers and providers | The development terminal shows run status, attention, Until checks, failure reason and Side parent. Provider output shows credentials, enablement, configuration, model count and the end of temporary unavailability. Both commands retain JSON output. | `test/dev-worker.test.ts`, `test/until.test.ts` |
+
+An isolated process loaded the built runtime and used the paired Agent against
+Nexus at `localhost:3000`. Creating and replaying a text request on
+`deepseek/deepseek-flash` returned the same ID,
+`01a208ab-716c-74a4-becd-d057e82809f7`, and one follower.
+All three full/lifecycle switches reported a change. The completed snapshot
+at sequence 4 matched the full resource fetched from Nexus and contained
+`READY`. Deleting the request and its private workspace was verified by
+reading each back and receiving HTTP 404. The development terminal's text
+and JSON provider output also agreed on all ten lanes returned by the
+installed service.
+
+The selected Rho reference suites passed 573 cases across the eleven packages,
+including 27 history-route cases. Runtime conformance passed 448 tests with
+Chromium, PTY and WebRTC enabled. The Linux-only filename-byte case skipped
+on macOS. Core MCP and Integration passed 135 tests, Code Mode passed 325,
+and the SDK check, regenerated clients, runtime build and root `bun run check`
+passed.
+The [WebUI review](../nexus-ui/docs/rho-webui-parity.md#conversation-history)
+covers the separate UI implementation and its Chromium regression.
 
 ## Scheduled executions and adaptation inspection
 

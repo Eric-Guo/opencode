@@ -51,6 +51,27 @@ completion, and `130` for interruption. `--output-format` accepts `text`, `json`
 `POST /api/experimental/nexus/run` SSE endpoint. HTTP recovery remains authoritative
 when realtime transcript frames are unavailable.
 
+## Standalone inference requests
+
+The paired Agent can submit a standalone workload in its selected workspace.
+Supply a stable key for each submission and reuse it when retrying the same
+request. `workspace` can select another workspace available to the Agent.
+
+```sh
+opencode nexus manage --json '{"action":"inference.create","key":"example-1","model":"provider/model","input":"Say hello","live":false}'
+opencode nexus manage --json '{"action":"inference.list"}'
+opencode nexus manage --json '{"action":"inference.subscribe","request":"REQUEST_ID"}'
+opencode nexus manage --json '{"action":"inference.unsubscribe","request":"REQUEST_ID"}'
+```
+
+Creation returns the accepted request ID in `public_id`. The list shows
+requests followed by this service in the specified workspace. Each row
+includes preview text, event sequence, status and the full result when
+`complete` becomes true. Unsubscribing switches to lifecycle events.
+It leaves the request running and the final result available. The follower
+list lasts for the connection. After reconnecting, replay the original
+submission with its key or read the saved ID through the Nexus member API.
+
 ## Extension configuration
 
 Inspect saved configuration, active tools and readiness:

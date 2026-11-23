@@ -365,6 +365,16 @@ export class Operations {
     }
   }
 
+  async followerRun(workspace: string, id: string, options: RequestOptions) {
+    const run = await this.member.workspace(workspace).run(id).fetch(options)
+    return {
+      status: run.status,
+      attention: run.attention,
+      failure_reason: run.failure_reason,
+      until: this.application.until.progress(workspace, run),
+    }
+  }
+
   async command(value: unknown, options: RequestOptions = {}) {
     const input = Schema.decodeUnknownSync(Operation)(value)
     const selected = "workspace" in input ? (input.workspace ?? this.identity.workspace) : this.identity.workspace
@@ -378,17 +388,30 @@ export class Operations {
           info: await this.member.workspace(host.workspace).conversation(host.conversation).fetch(options),
         })),
       )
-      return conversations
-        .filter((row) => row.info.side === (input.side === true))
-        .map((row) => ({
-          host_type: "conversation",
-          public_id: row.host.conversation,
-          workspace: row.host.workspace,
-          archived: !!row.info.archived_at,
-          side: row.info.side,
-          ...(row.info.side && { parent: row.info.source_conversation_public_id }),
-          active_turn: row.info.active_turn_public_id,
-        }))
+      return Promise.all(
+        conversations
+          .filter((row) => row.info.side === (input.side === true))
+          .map(async ({ host, info }) => {
+            const turn = info.active_turn_public_id
+              ? await this.member
+                  .workspace(host.workspace)
+                  .conversation(host.conversation)
+                  .turns.fetch(info.active_turn_public_id, {}, options)
+              : undefined
+            const run = (turn?.running_variant ?? turn?.active_variant)?.run_public_id
+            return {
+              host_type: "conversation",
+              public_id: host.conversation,
+              workspace: host.workspace,
+              archived: !!info.archived_at,
+              side: info.side,
+              ...(info.side && { parent: info.source_conversation_public_id }),
+              active_turn: info.active_turn_public_id,
+              status: turn?.status ?? (info.archived_at ? "archived" : "idle"),
+              ...(run && (await this.followerRun(host.workspace, run, options))),
+            }
+          }),
+      )
     }
     if (input.action === "rules")
       return {
