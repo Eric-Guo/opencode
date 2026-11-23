@@ -18,12 +18,12 @@ import {
 } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { createHash } from "node:crypto"
-import { mkdir, readFile, realpath, stat } from "node:fs/promises"
+import { mkdir, realpath, stat } from "node:fs/promises"
 import { isAbsolute, join, relative, sep, win32, posix } from "node:path"
 import { scheduler } from "node:timers/promises"
 import type { NexusCommand, NexusOperator } from "@opencode/protocol/nexus-command"
 import { Schema } from "effect"
-import { atomic, missing, vault } from "./storage"
+import { atomic, vault } from "./storage"
 import type { HostTools } from "./host"
 export { hostTools } from "./host"
 import type { RunnerTool } from "./extensions"
@@ -66,7 +66,7 @@ import { NexusExecutor } from "./executor"
 import { EnvironmentChange } from "./environments"
 import { DefaultEnvironment } from "./default-environment"
 import type { NexusRun } from "@opencode/schema/nexus-run"
-import { ApplicationSettings } from "./settings"
+import { ApplicationSettings, readConnectionSettings, type Settings } from "./settings"
 import { Adaptations } from "./adaptations"
 import { AgentRenewal, renewalClock } from "./renewal"
 import { McpSessions, McpUnavailable } from "./mcp-sessions"
@@ -74,15 +74,6 @@ import { isSubagentTool } from "./bot-policy"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
 
-const Settings = Schema.Struct({
-  origin: Schema.String,
-  identifier: Schema.String,
-  directory: Schema.String,
-  workspace: Schema.String,
-  model: Schema.String,
-})
-
-type Settings = typeof Settings.Type
 type Identity = { agent: string; name: string; runner: string; workspace: string; workspaceName: string }
 type Pairing = { code: string; url: string }
 type Connection = {
@@ -295,12 +286,9 @@ export class NexusRuntime {
   }
 
   async restore() {
-    const settings = await readFile(join(this.storage, "settings.json"), "utf8").catch((error) => {
-      if (missing(error)) return undefined
-      throw error
-    })
+    const settings = await readConnectionSettings(this.storage)
     if (!settings) return
-    this.settings = Schema.decodeUnknownSync(Schema.fromJsonString(Settings))(settings)
+    this.settings = settings
     this.statusValue = this.view("unpaired")
     const authority = new DeviceFlow({ baseURL: this.settings.origin })
     const saved = await this.store.read()

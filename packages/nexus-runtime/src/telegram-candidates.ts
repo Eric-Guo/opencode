@@ -94,9 +94,8 @@ export async function telegramCandidates(
 
 export function telegramExecution(application: NexusApplication, work: TelegramWork) {
   const chat = application.client.workspace(work.target.workspace).conversation(work.target.conversation)
-  return (work.candidate || work.report) && work.execution
-    ? chat.execution(work.execution)
-    : work.canonical
-      ? chat.execution(work.canonical)
-      : chat.inputExecution(work.input)
+  if ((work.candidate || work.report) && work.execution) return chat.execution(work.execution)
+  if (work.canonical) return chat.execution(work.canonical)
+  if (work.schedule && work.execution) return chat.execution(work.execution)
+  return chat.inputExecution(work.input)
 }
