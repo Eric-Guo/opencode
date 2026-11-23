@@ -69,7 +69,7 @@ import type { NexusRun } from "@opencode/schema/nexus-run"
 import { ApplicationSettings } from "./settings"
 import { Adaptations } from "./adaptations"
 import { AgentRenewal, renewalClock } from "./renewal"
-import { McpSessions } from "./mcp-sessions"
+import { McpSessions, McpUnavailable } from "./mcp-sessions"
 import { isSubagentTool } from "./bot-policy"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
@@ -130,11 +130,11 @@ export class NexusRuntime {
     () => this.extensionTools(),
     async (input) => {
       const registrar = this.extensionManager?.conversationServers()
-      if (!registrar) throw new Error("No conversation MCP registrar is loaded.")
+      if (!registrar) throw new McpUnavailable("mcp_unavailable: no conversation MCP registrar is loaded.")
       const opened = await registrar(input)
       if (registrar !== this.extensionManager?.conversationServers()) {
         await opened.close()
-        throw new Error("The conversation MCP registrar was replaced while opening its servers.")
+        throw new McpUnavailable("mcp_unavailable: the conversation MCP registrar changed while opening its servers.")
       }
       return opened
     },
@@ -866,7 +866,7 @@ export class NexusRuntime {
     )(input)
     const operation = this.editorChanges.then(async () => {
       const active = this.connection
-      if (!active || !this.host) throw new Error("Editor MCP requires a connected OpenCode runtime.")
+      if (!active) throw new Error("Editor MCP requires a connected OpenCode runtime.")
       const servers = action === "editor.mcp.detach" ? [] : (command.servers ?? [])
       // Host deletion may already make the conversation unreadable; clearing owns no new authority.
       if (Array.isArray(servers) && !servers.length)
@@ -881,7 +881,10 @@ export class NexusRuntime {
         throw new Error("Unknown editor conversation.")
       if (info.archived_at || !command.cwd || !isAbsolute(command.cwd))
         throw new Error("Editor MCP requires an active conversation and absolute working directory.")
-      return this.editorSessions.bind({ ...command, directory: command.cwd, servers, signal: this.stop.signal })
+      const directory =
+        info.default_runner?.executor_public_id === active.identity.runner ? command.cwd : this.defaultEnvironment.root
+
+      return this.editorSessions.bind({ ...command, directory, servers, signal: this.stop.signal })
     })
     this.editorChanges = operation.then(
       () => {},
@@ -1226,7 +1229,10 @@ export class NexusRuntime {
       }
 
       if (command.name === "editor.mcp.attach" || command.name === "editor.mcp.detach")
-        return this.editorMcp(command.name, command.input)
+        return this.editorMcp(command.name, command.input).catch((error: unknown) => {
+          if (error instanceof McpUnavailable) return { tools: [], issues: [error.message] }
+          throw error
+        })
       if (["environment.read", "environment.bind", "editor.environment.bind", "environments"].includes(command.name)) {
         const active = this.connection
         if (!active) throw new Error("Nexus is disconnected.")

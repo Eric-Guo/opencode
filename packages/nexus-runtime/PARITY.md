@@ -13,10 +13,66 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The [latest verification](#runner-placement-and-model-selection)
-covers runner placement, model selection and Human input replay.
+tests below. The [latest verification](#editor-mcp-and-workspace-run-listing)
+covers editor MCP placement, workspace run listing and new-conversation defaults.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Editor MCP and workspace run listing
+
+Reviewed November 23, 2026 from OpenCode `9fc413cb08b` and Cybros
+`48ff47738`. The WebUI review used the separate Nexus UI checkout at
+`cf69cafab`.
+
+| Rho entry point | OpenCode execution path | Behavior exercised |
+| --- | --- | --- |
+| `rho` daemon and environment routes | `runtime.ts`, `application.ts`, `admission.ts`, `turn-lifecycle.ts` | Agent connection, admission replay, captured declarations and held execution recovery |
+| `rho-env` runner and tool handlers | `runner-inbox.ts`, `runner.ts`, `environments.ts`, `terminal.ts` | Claim placement, file reads, approval and PTY ownership |
+| `rho-codemode` code and claim bridge | `nexus.codemode` → `code.ts` | Calls from an accepted claim through OpenCode Code Mode and result delivery |
+| `rho-mcp` conversation registrar | `nexus.mcp` → `mcp-session.ts`, `mcp-sessions.ts`, `mcp.ts` | Real stdio peers, catalog curation, anchor-scoped calls and mount retirement |
+| `rho-browser` tools and sessions | `nexus.browser` → `browser.ts`, `browser-session.ts` | Tab ownership, navigation, cancellation and recovery in isolated Chromium |
+| `rho-web-tools` fetch and render | `web.ts` | Redirect handling, response rendering and truncation |
+| `rho-acp` editor sessions | CLI `nexus acp` → `editor.ts`, runtime registrar | New, load and resume on a remote runner, editor disconnect and declined attachments |
+| `rho-acp-client` delegation | `acp.ts`, `acp-child.ts` | Child tool results, cancellation and reuse |
+| `rho-ingress-telegram` access and delivery | `telegram-ingress.ts`, `telegram-transport.ts`, `telegram-workers.ts` | Sender ownership, durable delivery and worker results with a Telegram protocol fixture |
+| `rho-t3` work and stop handlers | `t3.ts`, `t3-transport.ts` | Work ownership, cancellation and resumption with a T3 protocol fixture |
+| `rho-dev` run routes and CLI | `dev/cli.ts` → `dev/extension.ts`, `operations.ts`, `dev/streams.ts` | Workspace-visible runs, status and attention filters, pagination and local observation |
+
+The selected Rho reference suites passed 328 cases across these eleven
+packages. OpenCode conformance passed 440 tests across 76 files on macOS.
+The Linux-only byte-preserving filename test skipped. Core MCP and Integration
+passed 138 tests, the CLI and Server Nexus adapters passed three, and the
+Protocol identifier check passed. Both runtime type checks, its build and
+root `bun run check` passed.
+
+### Live source checks
+
+An isolated managed service connected to `http://localhost:3000` using two
+scratch Agents, a private machine runner and a scratch workspace. The real
+ACP CLI opened an owned conversation with the MCP extension disabled and
+returned a session ID with the reason in `_meta["opencode.mcp.issues"]`. Rho
+prints this diagnostic on stderr. After enablement, resume mounted a stdio
+peer on the Agent. The remote runner kept `/remote/review/project` and its
+additional directory. The two executor contexts carried the same conversation
+anchor.
+
+The accepted prompt in conversation `01a205eb-a4d0-742b-912b-fdd555a3e633`
+produced run `01a205eb-ade8-73d4-849a-6073bd66c53d`. Task `r2t0` completed
+`mcp__review__reportcwd` and returned the Agent's configured local working
+directory. The model received the result. Session close removed the callable
+tool. Loading the conversation in a new editor mounted it again, and closing
+editor stdin retired it on process exit. The sealed model request also
+confirmed the [kernel tool selection saved in Chromium](../nexus-ui/docs/rho-webui-parity.md#new-conversation-defaults).
+
+The source development CLI listed two pending standalone runs created by
+different Agents in the same workspace. Attaching one changed only its
+follow marker. OpenCode's JSON output retains the SDK page and cursor.
+The worker regression also distinguishes a known conversation from an
+observed run and checks the next filtered page.
+
+Cleanup confirmed the workspace reached `deleted`, both Agents reached
+`removed`, and the private runner and all five scratch credentials were
+revoked. The isolated source service and UI server were stopped.
 
 ## Runner placement and model selection
 
@@ -27,7 +83,7 @@ owners for all eleven executable non-WebUI packages.
 | Workflow | Behavior | TypeScript checks |
 | --- | --- | --- |
 | Development CLI and one-shot prompts | Opening with a directory validates it for the selected runner before creating the conversation. Local paths resolve on disk. A remote runner accepts absolute paths that exist only on its host. The stored root, additional directories and conversation anchor travel with the accepted input and its Until check. Project instructions come from the local runner only when it owns a filesystem context. | `test/dev.test.ts`, `test/environments.test.ts`, `test/conventions.test.ts`, `test/run.test.ts` |
-| ACP editor | New sessions pass the editor's root set to the same open operation. Load and resume bind the requested root set to the conversation's current runner. Editor filesystem capabilities and editor MCP attachments require local placement. Relative paths and root sets over 4 KiB are rejected at the ACP boundary. | `test/editor-policy.test.ts`, `test/editor.test.ts` |
+| ACP editor | New sessions pass the editor's root set to the same open operation. Load and resume bind the requested root set to the conversation's current runner. Editor filesystem capabilities require local runner placement. The later [editor MCP review](#editor-mcp-and-workspace-run-listing) covers agent-owned mounts on remote-root sessions. Relative paths and root sets over 4 KiB are rejected at the ACP boundary. | `test/editor-policy.test.ts`, `test/editor.test.ts` |
 | Input model | For the runtime's Agent and Bots, an omitted model inherits the last accepted explicit choice. A string pins a route, including the current default. An explicit null clears the pin. Preparing a request reserves its selection for retries, and it affects subsequent inputs upon acceptance. | `test/application.test.ts`, `test/bots.test.ts`, `test/dev.test.ts` |
 
 The development CLI opened a scratch conversation on the live Nexus server at
