@@ -1,8 +1,8 @@
 The runtime and desktop bridge use the MIT-licensed `@cybros/agent` SDK
-from `sdks/typescript` in Cybros revision `0dac9b6b09758458379b06c8d80790f4dd035deb`,
-which adds the lifecycle selector on `RealtimeClient.inferenceEvents`.
+from `sdks/typescript` in Cybros revision `972da259382104d83493fce3d859964eb93d12e2`.
+This revision allows `UpdateSchedule.name` to be cleared with null.
 Build that source with `pnpm run build`, run `npm pack --ignore-scripts`,
-and rename the output to `cybros-agent-0.1.0-lifecycle.tgz`.
+and rename the output to `cybros-agent-0.1.0-schedules.tgz`.
 The filename distinguishes the archive in Bun's installation cache.
 The upstream license is included.
 

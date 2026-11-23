@@ -142,6 +142,7 @@ test.each([
   const scheduleWrites: JsonObject[] = []
   const downloads = { bound: false, paths: [] as string[] }
   const policyTools: JsonObject[] = []
+  const scheduledChat = { captured: false, pin: "" }
   const subagentOff = { active: false }
   const announcements: (typeof Announcement.Type)[] = []
   const measured = new Date().toISOString()
@@ -300,8 +301,13 @@ test.each([
       }
       if (path === "/agent_api/v1/tools/assembly") {
         const body = (await request.json()) as JsonObject
-        expect(body.configuration).toBeDefined()
-        expect(body.conversation_public_id).toBeUndefined()
+        if (scheduledChat.captured) {
+          expect(body.conversation_public_id).toBe("conversation")
+          expect(body.configuration).toBeUndefined()
+        } else {
+          expect(body.configuration).toBeDefined()
+          expect(body.conversation_public_id).toBeUndefined()
+        }
         expect(body.default_runner_executor_public_id).toBeNull()
         return Response.json({ tool_definitions: policyTools, environment: {} })
       }
@@ -366,6 +372,8 @@ test.each([
           conversation: conversationFixture({
             public_id: path.endsWith("/scratch") ? "scratch" : "conversation",
             workspace_public_id: approval.workspace,
+            agent_configuration_present: scheduledChat.captured,
+            metadata: scheduledChat.pin ? { "opencode.initial_model": scheduledChat.pin } : {},
             answering_user_public_id: approval.agent,
             archived_at: approval.archived ? measured : null,
             default_runner: downloads.bound ? { executor_public_id: "runner", presence: "connected" } : null,
@@ -625,6 +633,7 @@ test.each([
         expect(downloads.paths).toHaveLength(1)
         downloads.bound = false
 
+        policyTools.push({ function: { name: "read" } }, { function: { name: "write" } })
         await runtime.manage({
           action: "schedule.create",
           workspace: "workspace",
@@ -632,6 +641,9 @@ test.each([
           key: "schedule-create",
           prompt: "Review",
           model: "provider/selected",
+          reasoning_enabled: false,
+          fallback_models: ["provider/backup"],
+          tool_names: ["read", "unavailable"],
           rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
         })
         await runtime.manage({
@@ -652,7 +664,7 @@ test.each([
           after: "next-execution",
         })
         expect(scheduleWrites.map((write) => write.model)).toEqual([
-          { model: "provider/selected" },
+          { model: "provider/selected", reasoning_enabled: false },
           { model: "provider/updated" },
         ])
         await runtime.manage({
@@ -664,6 +676,57 @@ test.each([
           prompt: "Updated prompt",
         })
         expect(scheduleWrites.at(-1)).toEqual({ expected_lock_version: 1, prompt: "Updated prompt" })
+        expect(scheduleWrites[0]).toMatchObject({
+          model_selection: { source: "explicit", constraint: "route", model: "provider/selected" },
+          fallback_models: ["provider/backup"],
+          tool_names: ["read"],
+          approval_mode: "ask",
+          executor_contexts: { runner: { "opencode.mcp": { anchor: null } } },
+        })
+        await runtime.manage({
+          action: "schedule.update",
+          workspace: "workspace",
+          conversation: "conversation",
+          id: "job",
+          version: 2,
+          name: null,
+          reasoning_enabled: false,
+          tool_names: [],
+          fallback_models: [],
+        })
+        expect(scheduleWrites.at(-1)).toEqual({
+          expected_lock_version: 2,
+          name: null,
+          model: { reasoning_enabled: false },
+          tool_names: [],
+          fallback_models: [],
+        })
+        scheduledChat.pin = "provider/pin"
+        const scheduled = {
+          action: "schedule.create",
+          workspace: "workspace",
+          conversation: "conversation",
+          key: "pin",
+          prompt: "Review",
+          rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
+        } as const
+        expect(
+          await runtime.manage({ action: "schedule.defaults", workspace: "workspace", conversation: "conversation" }),
+        ).toMatchObject({ model: "provider/pin" })
+        await runtime.manage(scheduled)
+        expect(scheduleWrites.at(-1)).toMatchObject({
+          model: { model: "provider/pin" },
+          model_selection: { source: "explicit", constraint: "route" },
+          tool_names: ["read", "write"],
+        })
+        scheduledChat.captured = true
+        await runtime.manage({ ...scheduled, key: "captured", reasoning_enabled: false })
+        expect(scheduleWrites.at(-1)?.model).toEqual({ reasoning_enabled: false })
+        expect(scheduleWrites.at(-1)).not.toHaveProperty("model_selection")
+        expect(scheduleWrites.at(-1)).not.toHaveProperty("fallback_models")
+        scheduledChat.captured = false
+        scheduledChat.pin = ""
+        policyTools.length = 0
         expect(calls.find((call) => call.path.endsWith("/schedules/job/executions"))?.after).toBe("next-execution")
         const memory = { action: "application.memory", conversation: "conversation", command: "ls" } as const
 

@@ -26,7 +26,8 @@ import {
 import { telegramConversationCommand, telegramSessionSwitch, telegramTrackConversations } from "./telegram-commands"
 import { conversationMemory } from "./memory-commands"
 import { telegramSetup } from "./telegram-setup"
-import { parseTelegramJob, recordJobExecutions, telegramJob, telegramTime } from "./telegram-schedules"
+import { recordJobExecutions, telegramJob } from "./telegram-schedules"
+import { parseJob, scheduleTime } from "./jobs"
 import { telegramJobDiscovery } from "./telegram-job-discovery"
 import { telegramParticipate } from "./telegram-participation"
 import { telegramWorkers } from "./telegram-workers"
@@ -1749,7 +1750,7 @@ export class TelegramIngress {
           ? {}
           : match[3] === "now"
             ? { deliver_in: "0s" }
-            : { deliver_at: telegramTime(match[3], now) }
+            : { deliver_at: scheduleTime(match[3], now) }
       const selection = state.queue_selections?.[queueRoute(route, update.requester)]
       if (
         !selection ||
@@ -1792,8 +1793,8 @@ export class TelegramIngress {
       if (update.media || update.unsupportedMedia) return "/job and /remind accept text only."
       if (action === "remind" && !/^(in|at)\s+\S+\s+\S/.test(argument))
         return "Use /remind in DURATION TEXT or /remind at TIME TEXT."
-      const job = parseTelegramJob(action === "remind" ? "create once " + argument : argument, now)
-      const jobID = !["create", "list"].includes(job.action) ? job.rest.split(/\s+/)[0] : undefined
+      const job = parseJob(action === "remind" ? "create once " + argument : argument, now)
+      const jobID = job.id
       const trackedJob = jobID
         ? state.jobs?.find(
             (row) =>
@@ -1886,7 +1887,6 @@ export class TelegramIngress {
         speaker: speaker.public_id,
         owner: owner || (!!trackedJob && trackedJob.requester === update.requester) || !!job.create,
         key: keyValue,
-        now,
         signal: this.signal,
         model: frozen ? (frozen.model ?? undefined) : state.model,
       })
