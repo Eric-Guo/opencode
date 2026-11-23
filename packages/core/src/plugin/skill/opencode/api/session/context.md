@@ -8,6 +8,10 @@ Returns: `{ data: Session.Message.Info[] }`
 
 ## Types
 
+- `Connection.CredentialInfo`: `{ type: "credential"; id: string; label: string; method: "key" | "oauth" | "external"; status?: Connection.Status }`
+- `Connection.EnvInfo`: `{ type: "env"; name: string; status?: Connection.Status }`
+- `Connection.Info`: `Connection.CredentialInfo | Connection.EnvInfo`
+- `Connection.Status`: `{ status: "needs_auth"; message: string; url?: string }`
 - `Location.PublicRef`: `{ directory: string }`
 - `Model.Ref`: `{ id: string; providerID: string; variant?: string }`
 - `Prompt.AgentAttachment`: `{ name: string; mention?: Prompt.Mention }` An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent.
@@ -15,6 +19,8 @@ Returns: `{ data: Session.Message.Info[] }`
 - `Prompt.FileSource`: `{ type: "inline" } | { type: "uri"; uri: string }`
 - `Prompt.Mention`: `{ start: number; end: number; text: string }`
 - `Prompt.SkillAttachment`: `{ id: string; name: string; text?: string; mention?: Prompt.Mention }`
+- `Session.Error.ConnectionFallbackRecovery`: `{ type: "connection-fallback"; integrationID: string; previous: Connection.Info; promoted: Connection.Info; unavailableUntil: number }`
+- `Session.Error.Recovery`: `Session.Error.ConnectionFallbackRecovery`
 - `Session.Message.AgentSelected`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; type: "agent-switched"; agent: string; previous?: string }`
 - `Session.Message.Assistant`: `{ id, metadata, time, type, agent, model, content, snapshot, finish, rawFinish, native, cost, tokens, error, retry }`
 - `Session.Message.Compaction`: `Session.Message.Compaction.Running | Session.Message.Compaction.Completed | Session.Message.Compaction.Failed`
@@ -30,5 +36,5 @@ Returns: `{ data: Session.Message.Info[] }`
 - `Session.Message.Synthetic`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; text: string; description?: string; type: "synthetic" }`
 - `Session.Message.System`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; type: "system"; text: string; description?: string }`
 - `Session.Message.User`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; text: string; files?: Prompt.FileAttachment[]; agents?: Prompt.AgentAttachment[]; skills?: Prompt.SkillAttachment[]; type: "user" }`
-- `Session.StructuredError`: `{ type: string; message: string; status?: number; response?: { body }; retryAfterMs?: number }`
+- `Session.StructuredError`: `{ type: string; message: string; status?: number; response?: { body }; retryAfterMs?: number; recovery?: Session.Error.Recovery }`
 - `TokenUsage.Info`: `{ input: number; output: number; reasoning: number; cache: { read, write } }`
