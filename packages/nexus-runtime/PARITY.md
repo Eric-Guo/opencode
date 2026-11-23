@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`4053db620ff51b4c9e910b8a6793f5cd4473958f`. Paths in the first column are relative
+`7a8243168e166cab52cfce710008723e936d6603`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,9 +13,38 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The latest review covers [standalone inference and follower inspection](#standalone-inference-and-follower-inspection).
+tests below. The latest review covers [recorded changes and published outputs](#recorded-changes-and-published-outputs).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Recorded changes and published outputs
+
+Reviewed November 23, 2026 from OpenCode `58261aaef0c` and Nexus UI
+`cfb68a7221`. Cybros `7a8243168` has the same `agents/rho` tree
+(`7ea67f07b`) as the previous baseline, `4053db620`.
+
+| Rho workflow | TypeScript owner | Verified behavior |
+| --- | --- | --- |
+| `rho/lib/rho/run_changes.rb`, `rho-env` checkpoints | `src/recorded-history.ts` reads durable task results | Review takes the newest capture per original runner and root, up to the deliverable’s completion or the run’s completion when the deliverable has no timestamp. An empty later capture clears a reverted diff. Older OpenCode results with only step patches remain readable. Restore addresses the original local task. |
+| `rho` published artifacts | `src/published-artifacts.ts`, shared by ingress and the UI bridge | Explicit file publications and generated images are resolved under the reader’s credential. Child callbacks follow the accepted variant, including after another becomes active. Activity retains incidental captures. |
+| `rho-dev task` and `call_tool` | `dev/terminal.ts` | Text mode prints the task outcome, approval, tool input, structured output and captured blocks once. Resource links include available MIME type, byte count and fetchable ID. JSON retains the complete SDK result. |
+
+The [owner mapping](#application-and-executor) and [reference test table](#reference-contract-anchors)
+cover all eleven executable runtime packages. The selected Ruby suites passed 143 tests
+across all eleven, including Ops review and publications, checkpoint storage, the Code Mode
+claim bridge, web rendering, browser tools, MCP conversations, ACP replay and delegation,
+Telegram delivery, T3 work and development CLI artifacts. OpenCode conformance passed
+449 tests across 77 files with Chromium, PTY and WebRTC enabled. The Linux-only filename
+test skipped on macOS. Both runtime type checks, the runtime build and the root check passed.
+
+Port 3000 was unavailable during this review. An isolated Nexus server with temporary
+PostgreSQL databases served real HTTP reads using a Human credential and seeded history.
+The development terminal’s text and JSON agreed on a recorded write. The UI bridge read
+two original runners without a local runner, rejected a capture completed in the following second,
+and read the same patches through a fork. Nexus exposes task completion at whole-second
+precision, so a task tied with the deliverable remains eligible, as in Rho. Capture metadata
+retains microseconds for choosing between eligible snapshots. The [UI review](../nexus-ui/docs/rho-webui-parity.md#answer-files-and-recorded-changes)
+covers publication, byte downloads and inherited history.
 
 ## Standalone inference and follower inspection
 
