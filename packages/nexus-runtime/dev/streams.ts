@@ -51,6 +51,10 @@ export class DevelopmentStreams {
     private readonly signal: AbortSignal,
   ) {}
 
+  followedRuns() {
+    return [...this.followers.values()].flatMap((row) => (row.run ? [row.run] : []))
+  }
+
   async command(value: unknown): Promise<JsonValue> {
     const input = Schema.decodeUnknownSync(StreamCommand)(value)
     if (input.action === "stream.followers")

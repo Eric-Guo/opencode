@@ -104,7 +104,8 @@ const inputOptions = [
 export const developmentHelp = `Nexus development controls (source checkout only)
   do [TEXT]               open a conversation, optionally with text or attachments
   say HOST [TEXT]         submit or schedule another input (--mode steer|queue|steer_now)
-  followers | runs | providers | models | adaptations | rules
+  runs [--status STATUS] [--attention ATTENTION] [--after CURSOR]
+  followers | providers | models | adaptations | rules
   attach HOST | watch HOST | follow HOST | result HOST
   transcript HOST [--before CURSOR] [--limit N] [--follow | --prefix KEY]
   graph HOST | phases HOST | task HOST KEY | request HOST KEY
@@ -215,7 +216,39 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     terminal.write(developmentHelp)
     return 0
   }
-  if (["providers", "models", "rules", "runs", "adaptations", "followers"].includes(parsed.verb)) {
+  if (parsed.verb === "runs") {
+    const page = object(
+      await call("runs", {
+        attention: parsed.text("attention"),
+        status: parsed.text("status"),
+        after: parsed.text("after"),
+      }),
+    )
+    if (parsed.values.json) {
+      print(page)
+      return 0
+    }
+
+    const items = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(page.items)
+    if (!items.length) terminal.write("(this workspace holds no matching runs)\n")
+    for (const row of items) {
+      const reason = row.attention && object(row.attention).reason
+      terminal.write(
+        [
+          row.public_id,
+          row.status,
+          reason && "ASKING: " + reason,
+          row.followed ? "followed" : "not followed",
+          row.failure_reason,
+        ]
+          .filter(Boolean)
+          .join("  ") + "\n",
+      )
+    }
+    if (page.next_after) terminal.write("Next cursor (pass with --after): " + page.next_after + "\n")
+    return 0
+  }
+  if (["providers", "models", "rules", "adaptations", "followers"].includes(parsed.verb)) {
     print(
       await call(parsed.verb, {
         attention: parsed.text("attention"),

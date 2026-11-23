@@ -32,6 +32,13 @@ const Turn = { ...Conversation, turn: Schema.NonEmptyString }
 const Task = { ...Run, task: Schema.NonEmptyString }
 const Key = { key: Schema.NonEmptyString }
 
+export const RunsOperation = Schema.Struct({
+  action: Schema.Literal("runs"),
+  ...Page,
+  attention: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.String),
+})
+
 export const Operation = Schema.Union([
   SkillOperation,
   Schema.Struct({ action: Schema.Literals(["identity", "rules"]) }),
@@ -50,12 +57,7 @@ export const Operation = Schema.Union([
     archived: Schema.optional(Schema.Boolean),
     side: Schema.optional(Schema.Boolean),
   }),
-  Schema.Struct({
-    action: Schema.Literal("runs"),
-    ...Page,
-    attention: Schema.optional(Schema.String),
-    status: Schema.optional(Schema.String),
-  }),
+  RunsOperation,
   Schema.Struct({ action: Schema.Literal("providers") }),
   Schema.Struct({ action: Schema.Literal("models") }),
   Schema.Struct({
@@ -337,6 +339,31 @@ export class Operations {
     private readonly identity: { workspace: string; agent: string; runner: string },
   ) {}
 
+  async runs(input: typeof RunsOperation.Type, followed: readonly string[], options: RequestOptions) {
+    const page = await this.member
+      .workspace(this.identity.workspace)
+      .runs.list(
+        { limit: 25, order: "desc", attention: input.attention, status: input.status, after: input.after },
+        options,
+      )
+    const runs = new Set(followed)
+
+    return {
+      ...page,
+      items: page.items.map((row) => ({
+        ...row,
+        followed:
+          runs.has(row.public_id) ||
+          (!!row.turn?.conversation_public_id &&
+            this.application.lifecycle.followsRun(
+              this.identity.workspace,
+              row.turn.conversation_public_id,
+              row.public_id,
+            )),
+      })),
+    }
+  }
+
   async command(value: unknown, options: RequestOptions = {}) {
     const input = Schema.decodeUnknownSync(Operation)(value)
     const selected = "workspace" in input ? (input.workspace ?? this.identity.workspace) : this.identity.workspace
@@ -520,16 +547,7 @@ export class Operations {
         ? workspace.conversations.archived(query, options)
         : workspace.conversations.list(query, options)
     }
-    if (input.action === "runs")
-      return workspace.runs.list(
-        {
-          answering_user_public_id: this.identity.agent,
-          attention: input.attention,
-          after: input.after,
-          status: input.status,
-        },
-        options,
-      )
+    if (input.action === "runs") return this.runs(input, [], options)
 
     if (input.action === "side")
       return this.application.openSide(
