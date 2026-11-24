@@ -64,7 +64,7 @@ export function hostTools(locations: typeof LocationServiceMap.Service.Service, 
                   })
 
                 // Expose only the requested browser action to execution hooks.
-                const snapshot = yield* registry.snapshot(session.permissions, {
+                const snapshot = yield* registry.snapshot(Permission.Policy.fromRules(session.permissions ?? []), {
                   tools: {
                     direct: new Set([name]),
                     hidden: new Set(registered.filter((tool) => tool.id !== name).map((tool) => tool.id)),

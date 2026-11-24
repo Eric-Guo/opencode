@@ -91,7 +91,7 @@ const listAgentTools = Effect.fn("server.debug.agent.listTools")(function* (agen
   const agent = yield* requireAgent(agentID)
   const registry = yield* Tool.Service
   const available = toolIDs(yield* registry.snapshot())
-  const enabled = new Set(toolIDs(yield* registry.snapshot(agent.permissions)))
+  const enabled = new Set(toolIDs(yield* registry.snapshot(Permission.Policy.fromRules(agent.permissions))))
   return yield* response(Effect.succeed(Object.fromEntries(available.map((id) => [id, enabled.has(id)]))))
 })
 
@@ -110,7 +110,7 @@ const executeAgentTool = Effect.fn("server.debug.agent.execute")(function* (
       message: `Tool ${toolID} not found for agent ${agent.id}`,
       field: "toolID",
     })
-  const tools = yield* registry.snapshot(agent.permissions)
+  const tools = yield* registry.snapshot(Permission.Policy.fromRules(agent.permissions))
   if (!toolIDs(tools).includes(toolID))
     return yield* new ForbiddenError({ message: `Tool ${toolID} is disabled for agent ${agent.id}` })
 
