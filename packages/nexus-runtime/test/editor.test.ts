@@ -11,6 +11,35 @@ import { NexusApplication } from "../src/application"
 import { conversationFeeds } from "./fixture/conversation-feeds"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture } from "./fixture/conversation"
+import { editorFixture } from "./fixture/editor"
+
+test("ACP reports a blocked admission as invalid parameters with the kernel reason", async () => {
+  await using fixture = await editorFixture(
+    (request) => {
+      if (new URL(request.url).pathname.endsWith("/events"))
+        return Response.json({
+          events: [
+            {
+              type: "input_blocked",
+              sequence: 1,
+              cursor: "blocked",
+              public_id: "event",
+              resource: { type: "conversation", public_id: "conversation" },
+              occurred_at: "2026-11-18T00:00:00Z",
+              payload: { input_public_id: "input", blocked_reason: "unknown_model" },
+            },
+          ],
+          pagination: { next_after: null, watermark: 1 },
+        })
+    },
+    { submit: async () => "input" },
+  )
+  await fixture.attach("session/resume")
+  await expect(fixture.prompt("Hello")).rejects.toMatchObject({
+    code: -32602,
+    message: expect.stringContaining("unknown_model"),
+  })
+})
 
 test("ACP initializes without kernel requests and authenticates before session setup", async () => {
   const calls: string[] = []
@@ -61,6 +90,8 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
   const elicited = Promise.withResolvers<void>()
   const answer = Promise.withResolvers<{ action: "cancel" }>()
   const questionShown = Promise.withResolvers<void>()
+  const catalog = Promise.withResolvers<void>()
+  let announced = Promise.withResolvers<void>()
   const pdf = {
     type: "resource",
     resource: { uri: "file:///answer.pdf", mimeType: "application/pdf", blob: "JVBERi0xLjcK" },
@@ -285,10 +316,13 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     "fixture",
     {
       defaults: { mode: "bypass", model: "launch-model" },
-      skills: async () => [
-        { name: "project-guide", description: "Project guide" },
-        { name: "retry", description: "Collision" },
-      ],
+      skills: async () => {
+        await catalog.promise
+        return [
+          { name: "project-guide", description: "Project guide" },
+          { name: "retry", description: "Collision" },
+        ]
+      },
       submit: async (input, signal) => {
         const receipt = await application.submit(
           { ...input, workspace: "workspace", principal: "human" },
@@ -302,6 +336,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
   const peer = client()
     .onNotification("session/update", ({ params }) => {
       updates.push(params)
+      if (params.update.sessionUpdate === "available_commands_update") announced.resolve()
       if (
         params.update.sessionUpdate === "agent_message_chunk" &&
         params.update.content.type === "text" &&
@@ -332,6 +367,9 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
       modes: { currentModeId: "bypass" },
     })
     expect(metadata.value["opencode.acp.model"]).toBe("launch-model")
+    expect(updates).toHaveLength(0)
+    catalog.resolve()
+    await announced.promise
     const commands = updates.find((event) => event.update.sessionUpdate === "available_commands_update")!.update
     expect(commands).toMatchObject({
       availableCommands: [
@@ -374,6 +412,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     await peer.agent.request("session/set_mode", { sessionId: "conversation", modeId: "rules" })
     await peer.agent.request("session/close", { sessionId: "conversation" })
     updates.length = 0
+    announced = Promise.withResolvers<void>()
     expect(
       await peer.agent.request("session/load", { sessionId: "conversation", cwd: directory, mcpServers: [] }),
     ).toMatchObject({ modes: { currentModeId: "rules" } })
@@ -381,8 +420,9 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
       "user_message_chunk",
       ...Array.from({ length: 4 }, () => ["tool_call", "tool_call_update"] as const).flat(),
       "agent_message_chunk",
-      "available_commands_update",
     ])
+    await announced.promise
+    expect(updates.at(-1)?.update.sessionUpdate).toBe("available_commands_update")
     expect(updates[1].update).toMatchObject({
       kind: "edit",
       rawInput: { content: "new" },
@@ -405,7 +445,10 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     expect(updates[8].update).toMatchObject({ status: "failed", content: [{ content: { text: "Remote refusal" } }] })
     await peer.agent.request("session/close", { sessionId: "conversation" })
     updates.length = 0
+    announced = Promise.withResolvers<void>()
     await peer.agent.request("session/resume", { sessionId: "conversation", cwd: directory })
+    expect(updates).toHaveLength(0)
+    await announced.promise
     expect(updates.map((event) => event.update.sessionUpdate)).toEqual(["available_commands_update"])
     await expect(
       peer.agent.request("session/set_mode", { sessionId: "conversation", modeId: "unknown" }),

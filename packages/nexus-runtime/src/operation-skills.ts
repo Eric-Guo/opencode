@@ -29,12 +29,13 @@ export async function skillOperation(
   if (input.action !== "skills" && (input.name.length > 64 || !/^[a-z0-9](?:-?[a-z0-9])*$/.test(input.name)))
     throw new Error("Invalid skill name.")
 
-  const collections = {
-    agent: (await client.profile.memoryCollections.list({ default: true }, options)).items[0],
-    workspace: (await client.workspace(workspace).memoryCollections.list({ default: true }, options)).items[0],
+  const defaultCollection = async (scope: "agent" | "workspace") => {
+    const owner = scope === "agent" ? client.profile : client.workspace(workspace)
+    return (await owner.memoryCollections.list({ default: true }, options)).items[0]
   }
 
   if (input.action === "skills") {
+    const collections = { agent: await defaultCollection("agent"), workspace: await defaultCollection("workspace") }
     const sections = await Promise.all(
       (["agent", "workspace"] as const).map(async (scope) => {
         const collection = collections[scope]
@@ -49,14 +50,14 @@ export async function skillOperation(
 
     return { ...Object.fromEntries(sections), collections, project: environments.projectDocuments() }
   }
-  const collection = collections[input.scope]
+  const collection = await defaultCollection(input.scope)
 
   if (!collection) throw new Error("The default memory collection is unavailable.")
 
   const documents = client.memoryCollections.documents(collection.public_id)
   const path = "skills/" + input.name
   const current = await documents.read(path, options).catch((error: unknown) => {
-    if (error instanceof NotFound && input.action === "skill.push") return null
+    if (input.action === "skill.push" && error instanceof NotFound && error.code === "memory_not_found") return null
 
     throw error
   })
