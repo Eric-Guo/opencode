@@ -124,6 +124,40 @@ test("terminal runs capture placement, ask for approval and return before the sh
           },
         ],
       })
+    if (path.endsWith("/runs") && request.method === "GET") {
+      expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+        kind: "standalone",
+        order: "desc",
+        after: "cursor",
+        limit: "20",
+      })
+      return Response.json({
+        runs: ["not-terminal", "missing", "terminal-run", "ended"].map((public_id) => ({
+          public_id,
+          status: "running",
+          created_at: "created",
+        })),
+        pagination: { next_after: "older" },
+      })
+    }
+    if (path.endsWith("/runs/missing")) return Response.json({ error: { code: "not_found" } }, { status: 404 })
+    if (path.endsWith("/runs/ended"))
+      return Response.json({
+        run: {
+          public_id: "ended",
+          status: "completed",
+          tasks: [
+            {
+              key: "call_tool",
+              tool_name: "terminal",
+              kind: "tool_task",
+              status: "completed",
+              lifetime: "run",
+              wake: "none",
+            },
+          ],
+        },
+      })
     if (path.endsWith("/runs"))
       return Response.json(
         {
@@ -206,6 +240,15 @@ test("terminal runs capture placement, ask for approval and return before the sh
       },
     })
     expect(requests.at(-1)?.path).toBe("/agent_api/v1/workspaces/selected/runs/terminal-run/start")
+    expect(
+      await application.operations.command({ action: "terminal.list", workspace: "selected", after: "cursor" }),
+    ).toEqual({
+      items: [
+        { run: "terminal-run", task: "terminal", status: "dispatched", created: "created" },
+        { run: "ended", task: "call_tool", status: "completed", created: "created" },
+      ],
+      next: "older",
+    })
     const target = { workspace: "selected", run: "terminal-run", task: "terminal" }
 
     expect(await application.operations.command({ action: "terminal.realtime", ...target })).toMatchObject({

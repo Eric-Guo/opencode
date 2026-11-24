@@ -13,9 +13,45 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
-tests below. The latest review covers [scheduled jobs and operator web fetch](#scheduled-jobs-and-operator-web-fetch).
+tests in the [reference contract anchors](#reference-contract-anchors). The latest review covers
+[personal instructions and delegated work](#personal-instructions-and-delegated-work).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Personal instructions and delegated work
+
+Reviewed November 24, 2026 against Cybros `79ff4f2da` from OpenCode `27b1b2b39e4`.
+
+- `rho/test/persona_commands_test.rb` maps to the production `nexus persona`
+  command, `src/persona.ts` and `NexusRuntime.manage`. The source CLI and source
+  OpenCode server ran against a disposable Rails Nexus installation. A Human
+  signed in through the browser, wrote instructions from a file and stdin, read
+  them back and reset the document. The local runtime had no active Agent.
+  `test/persona.test.ts` covers the exact 64 KiB boundary, invalid UTF-8, a BOM,
+  line endings, missing documents and unrelated 404s.
+- `rho-t3/test/work_test.rb` and `session_test.rb` map to `src/t3.ts`.
+  An uncertain Nexus task releases ownership. Continuing or forgetting still
+  requires settled native work, including its child agents. Stop accepts a
+  missing or already-terminal owner. A not-adjudicable cancellation requires
+  reading the saved owner's status. `test/t3.test.ts` exercises these decisions
+  through the registered tools with local Nexus and T3 protocol fixtures.
+- `rho/test/extensions/ops_terminals_test.rb` and the `rho-env` terminal suites
+  map to `src/operations.ts`, `src/terminal-runs.ts` and `src/terminal.ts`.
+  The `terminal.list` operation includes settled standalone terminals in its
+  history. The UI uses the same query with the viewing Human's credential and
+  filters settled tasks from its attach picker.
+  The UI opened a shell on the installed runner, reattached after reload, read a
+  variable from the same shell and stopped it. The private workspace returned
+  HTTP 404 after cleanup. The [UI review](../nexus-ui/docs/rho-webui-parity.md#terminal-recovery-and-structured-questions)
+  covers discovery, creation retries and output replay.
+
+Runtime conformance passed 456 cases with Chromium, PTY and WebRTC. One
+Linux-only filename case skipped on macOS. The selected Ruby suites passed
+141 cases across all eleven executable packages. They covered Ops, terminal
+streaming, Code Mode claims, MCP curation, web commands, idle browser sessions,
+ACP permissions and delegation policy, Telegram recovery, T3 and development
+execution commands. The Rho WebUI seat and terminal JavaScript suites passed
+20 and 33 cases respectively.
 
 ## Scheduled jobs and operator web fetch
 
