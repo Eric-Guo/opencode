@@ -27,6 +27,73 @@ const task = {
   approval: null,
 }
 
+test("development validates environment inputs locally and renders the registrar's mount report", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "nexus-dev-environment-"))
+  const file = join(folder, "servers.json")
+  const requests: { name: string; input: JsonObject }[] = []
+  const output: string[] = []
+  const requestsToResolve: string[] = []
+  const rows: JsonObject[] = []
+  const row = {
+    conversation: "chat",
+    root: "/project",
+    mcp: {
+      tools: [],
+      issues: ["old: transport sse unsupported"],
+      servers: [
+        { name: "empty", state: "connected", fault: null },
+        { name: "old", state: "down", fault: "transport sse unsupported" },
+      ],
+    },
+  }
+  const invoke = (...args: string[]) =>
+    runDevelopment(args, {
+      async command(input) {
+        requestsToResolve.push(String(input.action))
+        return { workspace: "w", conversation: "chat", run: null, side: false }
+      },
+      async extension(name, input) {
+        requests.push({ name, input })
+        return name === "environments" ? rows : row
+      },
+      write: (value) => {
+        output.push(value.toString())
+      },
+      error() {},
+      signal: new AbortController().signal,
+    })
+  try {
+    for (const text of ["{", "{}"]) {
+      await Bun.write(file, text)
+      await expect(invoke("environment", "chat", "--mcp", file)).rejects.toThrow("array")
+    }
+    await expect(invoke("port", "chat", "--endpoint", "http://localhost")).rejects.toThrow("--token")
+    await expect(invoke("port", "chat", "--token", "test")).rejects.toThrow("--endpoint")
+    expect(requestsToResolve).toEqual([])
+    expect(requests).toEqual([])
+    await invoke("environments")
+    expect(output.pop()).toContain("No followed conversation")
+    rows.push(row)
+    await invoke("environments")
+    expect(output.pop()).toContain("mcp: empty  connected\nmcp: old  down — transport sse unsupported")
+    await invoke("environment", "chat", "--json")
+    expect(JSON.parse(output.pop()!)).toEqual(row)
+    const servers = [{ name: "one", command: "peer" }]
+    await Bun.write(file, JSON.stringify(servers))
+    await invoke("environment", "chat", "--mcp", file)
+    await invoke("environment", "chat", "--mcp", "[]")
+    await invoke("port", "chat", "--clear")
+    expect(requests.slice(-3)).toEqual(
+      [servers, [], null].map((value) => ({
+        name: "environment.bind",
+        input: { conversation: "chat", ...(value === null ? { fs: null } : { mcp: value }) },
+      })),
+    )
+  } finally {
+    await rm(folder, { recursive: true, force: true })
+  }
+})
+
 test("development opens an idle conversation and admits attachment-only inputs with the saved route after restart", async () => {
   const inputs: JsonObject[] = []
   const opened: JsonObject[] = []

@@ -77,6 +77,12 @@ export const Catalog = Schema.Struct({
 })
 export interface Catalog extends Schema.Schema.Type<typeof Catalog> {}
 
+export type ProjectImport = {
+  imported: Entry[]
+  skipped: { path: string; reason: string }[]
+  missing: string[]
+}
+
 export const ToolChoices = Schema.Struct({
   tools: Schema.Array(
     Schema.Struct({
@@ -118,11 +124,13 @@ export const Command = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("preset.publish"), id: Schema.String, role: Role }),
   Schema.Struct({ action: Schema.Literal("preset.import"), value: Authored }),
+  Schema.Struct({ action: Schema.Literal("preset.import-project"), names: Schema.Array(Schema.String).pipe(optional) }),
   Schema.Struct({
     action: Schema.Literal("preset.import-document"),
     content: Schema.String,
     format: Schema.Literals(["md", "json"]),
     filename: Schema.String.pipe(optional),
+    name: Authored.fields.name.pipe(optional),
   }),
   Schema.Struct({
     action: Schema.Literal("preset.export-document"),
