@@ -3757,11 +3757,13 @@ export type ExperimentalNexusManageInput = {
           }
         }
       }
+    | { readonly action: "preset.import-project"; readonly names?: ReadonlyArray<string> | undefined }
     | {
         readonly action: "preset.import-document"
         readonly content: string
         readonly format: "md" | "json"
         readonly filename?: string | undefined
+        readonly name?: string | undefined
       }
     | { readonly action: "preset.export-document"; readonly id: string; readonly format: "md" | "json" }
     | {

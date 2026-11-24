@@ -57,6 +57,7 @@ type Settings = {
   protectedRoots?: readonly string[]
   hosts?: () => readonly { workspace: string; conversation: string }[]
   mcp?: (workspace: string, anchor: string, root: string, entries: Schema.Json) => Promise<Schema.Json>
+  mcpReport?: (workspace: string, anchor: string) => Schema.Json
 }
 
 /** Current authoring defaults. Accepted task placement is always taken from its frozen context. */
@@ -372,7 +373,11 @@ export class Environments {
       updated_at: current.entry?.updated_at ?? null,
       resolved,
       fs: port ? { client: port.client ?? "editor", read: port.read, write: port.write } : null,
-      mcp: current.binding.anchor ? (this.servers.get(JSON.stringify([workspace, current.binding.anchor])) ?? []) : [],
+      mcp: current.binding.anchor
+        ? (this.settings.mcpReport?.(workspace, current.binding.anchor) ??
+          this.servers.get(JSON.stringify([workspace, current.binding.anchor])) ??
+          [])
+        : [],
     }
   }
 }

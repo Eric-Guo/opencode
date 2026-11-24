@@ -2,16 +2,16 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Schema } from "effect"
 import type { RunnerTool } from "./extensions"
-import type { mcpSession } from "./mcp-session"
+import type { EditorMcpSession, mcpSession } from "./mcp-session"
 
-type Session = Awaited<ReturnType<typeof mcpSession>>
 type Input = Parameters<typeof mcpSession>[0]
-type Held = Session & {
+type Held = EditorMcpSession & {
   workspace: string
   anchor: string
   digest: string
   candidates: RunnerTool[]
   validation: string[]
+  faults: Map<string, string>
 }
 
 export class McpUnavailable extends Error {}
@@ -23,7 +23,7 @@ export class McpSessions {
 
   constructor(
     private readonly boot: () => readonly RunnerTool[],
-    private readonly open: (input: Input) => Promise<Session>,
+    private readonly open: (input: Input) => Promise<EditorMcpSession>,
     private readonly publish: () => Promise<void>,
     private readonly available: () => boolean = () => true,
   ) {}
@@ -35,6 +35,20 @@ export class McpSessions {
 
   values() {
     return this.held.values()
+  }
+
+  environment(workspace: string, anchor: string) {
+    const held = this.get(JSON.stringify([workspace, anchor]))
+    if (!held) return []
+    if (!held.servers) return this.report(held)
+
+    return {
+      ...this.report(held),
+      servers: held.servers.map((row) => {
+        const fault = held.faults.get(row.name)
+        return fault ? { ...row, state: "down", fault } : row
+      }),
+    }
   }
 
   async close() {
@@ -81,6 +95,7 @@ export class McpSessions {
         digest,
         candidates: candidate.tools,
         validation: candidate.issues,
+        faults: new Map(),
       }
 
       this.judge(held, this.boot(), [...this.held.values()])
@@ -134,7 +149,8 @@ export class McpSessions {
   }
 
   private judge(held: Held, boot: readonly RunnerTool[], others: readonly Held[]) {
-    const faults = new Map<string, string>()
+    const faults = held.faults
+    faults.clear()
     for (const tool of held.candidates) {
       const row = tool.definition.mcp?.server_key
       if (!row) throw new Error(tool.definition.name + " carries no MCP server key.")

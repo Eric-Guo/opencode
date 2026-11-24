@@ -758,6 +758,7 @@ export class NexusRuntime {
           hosts: () => this.connection?.application.lifecycle.hostsSnapshot() ?? [],
           mcp: (workspace, conversation, cwd, servers) =>
             this.editorMcp("editor.mcp.attach", { workspace, conversation, cwd, servers }),
+          mcpReport: (workspace, anchor) => this.editorSessions.environment(workspace, anchor),
         })
         this.connection.application.runners.configure({
           storage: join(this.storage, "runner.json"),
@@ -1321,7 +1322,10 @@ export class NexusRuntime {
       return workspace
     }
     if (command.action.startsWith("preset.")) {
-      const result = await active.application.presets.command(command as NexusPreset.Command)
+      const result = await active.application.presets.command(
+        command as NexusPreset.Command,
+        this.defaultEnvironment.current,
+      )
       if (
         !["preset.tools", "preset.read", "preset.list", "preset.export", "preset.export-document"].includes(
           command.action,
