@@ -39,6 +39,11 @@ const Announcement = Schema.Struct({
   ),
 })
 
+test("loads the public Nexus runtime in a fresh process", async () => {
+  // Other tests can initialize Core services first and mask an import cycle.
+  await Bun.$`${process.execPath} -e 'await import("@opencode/nexus-runtime")'`.cwd(join(import.meta.dir, "..")).quiet()
+})
+
 test.each([
   { name: "another agent's dedicated", dedicated: true, owned: false, create: false },
   { name: "another agent's archived dedicated", dedicated: true, owned: false, create: false, state: "archived" },
