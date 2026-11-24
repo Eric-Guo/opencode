@@ -1,10 +1,10 @@
-import { readFile, readdir, stat } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
+import { Glob } from "@opencode/util/glob"
 import { parseDocument } from "yaml"
 import { Schema } from "effect"
 import type { ExtensionModule } from "./extension-manager"
 import { readWindow } from "./file-read"
-import { missing } from "./storage"
 
 export async function readSkill(path: string) {
   const text = await readFile(path, "utf8")
@@ -38,25 +38,19 @@ export async function readSkill(path: string) {
 export async function scanSkills(root: string) {
   const found = new Map<string, Awaited<ReturnType<typeof readSkill>>>()
   const skipped: { path: string; reason: string }[] = []
-  for (const base of [".agents/skills", ".claude/skills"]) {
-    const directory = join(root, base)
-    const entries = await readdir(directory).catch((error) => {
-      if (missing(error)) return []
-      throw error
+  const paths = await Glob.scan("{.agents,.claude}/skills/*/SKILL.md", { cwd: root, symlink: true, include: "all" })
+
+  for (const relative of paths.sort()) {
+    const path = join(root, relative)
+    const skill = await readSkill(path).catch((error: unknown) => {
+      skipped.push({ path, reason: error instanceof Error ? error.message : String(error) })
     })
-    for (const name of entries.sort()) {
-      const path = join(directory, name, "SKILL.md")
-      const skill = await readSkill(path).catch((error: unknown) => {
-        skipped.push({ path, reason: error instanceof Error ? error.message : String(error) })
-        return undefined
-      })
-      if (!skill) continue
-      if (found.has(skill.name)) {
-        skipped.push({ path, reason: "Skill name is already announced: " + name })
-        continue
-      }
-      found.set(skill.name, skill)
+    if (!skill) continue
+    if (found.has(skill.name)) {
+      skipped.push({ path, reason: "Skill name is already announced: " + skill.name })
+      continue
     }
+    found.set(skill.name, skill)
   }
   return { skills: [...found.values()], skipped }
 }
