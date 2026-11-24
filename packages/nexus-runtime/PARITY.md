@@ -19,6 +19,28 @@ The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 
 ## Scheduled jobs and operator web fetch
 
+On November 24, 2026, the installed CLI and elected service were checked against
+Nexus on `localhost:3000` from OpenCode `f774b3dc494`. In a private workspace,
+the CLI listed, created, read, edited, paused, resumed, ran and canceled a
+recurring job. Its prompt-only edit retained the model selection, tool list,
+approval and rule. A one-time job fired on the Nexus clock and had no next run
+afterward. Across those jobs and a concurrent UI/CLI edit, the three child
+executions each completed once. The deleted workspace returned HTTP 404 and the
+service reported ready on its original workspace.
+
+With isolated local settings, the installed `web-fetch` command returned all
+139,999 text bytes and a six-byte binary. A 404 exited 1 with empty stdout.
+The [UI verification](../nexus-ui/docs/rho-webui-parity.md#live-scheduled-results)
+covers delivery and conflicting edits through the Human bridge.
+
+Importing `@opencode/nexus-runtime` alone in a fresh Bun process also exposed
+a Core initialization cycle between session working-directory metadata, file
+access and permissions. Loading file access inside `SessionCwd.locate` lets
+the runtime import and the standalone Server Nexus test complete. All 51 focused
+working-directory and file-access cases passed. The runtime conformance suite
+passed 454 cases with one Linux-only skip on macOS. Selected Ruby suites passed
+108 cases across the eleven executable Rho packages.
+
 Reviewed November 24, 2026 against Cybros `7a8243168` from OpenCode `dfe362962c5`.
 The [reference anchors](#reference-contract-anchors) identify the TypeScript implementation
 and local tests for each of the eleven executable packages.
