@@ -18,6 +18,8 @@
     ".": "./src/runtime.ts",
     "./editor": "./src/editor.ts",
     "./jobs": "./src/jobs.ts",
+    "./persona": "./src/persona.ts",
+    "./terminal-runs": "./src/terminal-runs.ts",
     "./web": "./src/web.ts",
     "./run": "./src/run.ts",
     "./experimental/history": "./src/recorded-history.ts",

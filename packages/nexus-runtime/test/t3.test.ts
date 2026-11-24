@@ -61,7 +61,7 @@ function service(
       runtimeRequests: [] as JsonObject[],
       nodes: [] as JsonObject[],
       providerSessions: [] as JsonObject[],
-      subagents: [],
+      subagents: [] as { status: string }[],
       turnItems: [{ id: "check", type: "command_execution", input: "bun test", outputOmitted: true }] as JsonObject[],
     },
   }
@@ -267,6 +267,75 @@ const launch = {
   workspaceStrategy: { type: "root" },
   initialMessage: { messageId: "one", text: "Check parser", attachments: [] },
 }
+
+test("T3 controls follow the saved owner's task status and preserve cancellation refusals", async () => {
+  using peer = service()
+  const state = { status: "uncertain", refusal: "already_terminal", cancelStatus: 409, reads: 0 }
+  const store = storeFixture((request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/tasks/delegate/cancel"))
+      return Response.json({ error: { code: state.refusal } }, { status: state.cancelStatus })
+    if (!path.endsWith("/tasks/delegate")) return
+    state.reads++
+    return Response.json({
+      task: { key: "delegate", kind: "tool_task", status: state.status, lifetime: "conversation", wake: "auto" },
+    })
+  })
+  try {
+    const context = {
+      workspace: "workspace",
+      conversation: "conversation",
+      run: "original",
+      task: "delegate",
+      directory: "/project",
+      signal: AbortSignal.timeout(5000),
+      ask: async () => "accept",
+    }
+    const app = new NexusApplication(
+      store.client,
+      { agent: "agent", runner: "runner", workspace: "workspace" },
+      () => ({}),
+    )
+    const client = new T3Client(
+      { url: peer.server.url.origin, token: "fixture", project_id: "project" },
+      { application: () => app, directory: "/project", storage: "/private-runtime", signal: context.signal },
+    )
+    const [delegate, control] = client.tools()
+    await delegate.execute({ prompt: "Fix parser" }, context)
+    const work_id = [...store.entries.keys()][0]
+    const call = (action: string) =>
+      control.execute({ action, work_id, prompt: "Follow up" }, { ...context, task: "control" })
+    peer.state.projection.subagents.push({ status: "running" })
+    await expect(call("forget")).rejects.toThrow("settle")
+    await expect(call("steer")).rejects.toThrow("no longer owns")
+    state.reads = 0
+    await call("stop")
+    expect(peer.requests.filter((r) => r.payload.type === "run.interrupt").at(-1)?.payload.runId).toBe("native-run")
+    expect(state.reads).toBe(0)
+    state.cancelStatus = 404
+    await call("stop")
+    state.cancelStatus = 403
+    await expect(call("stop")).rejects.toMatchObject({ status: 403 })
+    expect(state.reads).toBe(0)
+    state.cancelStatus = 409
+    state.refusal = "not_a_branch"
+    await expect(call("stop")).rejects.toMatchObject({ code: "not_a_branch" })
+    expect(state.reads).toBe(0)
+    state.refusal = "not_adjudicable"
+    state.status = "dispatched"
+    await expect(call("stop")).rejects.toMatchObject({ code: "not_adjudicable" })
+    state.status = "uncertain"
+    await call("stop")
+    expect(state.reads).toBe(2)
+    peer.state.projection.subagents.length = 0
+    await delegate.execute({ work_id, prompt: "Continue" }, { ...context, run: "next" })
+    await call("forget")
+    expect(store.entries.size).toBe(0)
+    expect(peer.requests.filter((r) => r.tag === "orchestration.launchThread")).toHaveLength(1)
+  } finally {
+    store.server.stop(true)
+  }
+})
 
 test("T3 rejects unsupported methods and malformed payloads before ticket discovery", async () => {
   using peer = service()

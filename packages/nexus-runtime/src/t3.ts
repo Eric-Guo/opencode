@@ -422,7 +422,10 @@ export class T3Client {
       .run(owner.run)
       .task(owner.task)
       .fetch({ signal: context.signal })
-      .then((detail) => !["completed", "failed", "canceled", "timed_out", "skipped"].includes(detail.task.status))
+      .then(
+        (detail) =>
+          !["completed", "failed", "timed_out", "uncertain", "canceled", "skipped"].includes(detail.task.status),
+      )
       .catch((error: unknown) => {
         if (error instanceof APIError && error.status === 404) return false
         throw error
@@ -586,11 +589,15 @@ export class T3Client {
         .task(work.value.owner.task)
         .cancel({ signal: context.signal })
         .catch(async (error: unknown) => {
-          if (
-            error instanceof APIError &&
-            (error.status === 404 || (error.status === 409 && !(await this.ownerActive(work.value.owner, context))))
-          )
-            return
+          if (error instanceof APIError) {
+            if (error.status === 404 || (error.status === 409 && error.code === "already_terminal")) return
+            if (
+              error.status === 409 &&
+              error.code === "not_adjudicable" &&
+              !(await this.ownerActive(work.value.owner, context))
+            )
+              return
+          }
           throw error
         })
       return { content: "Stop requested; observe completion separately." }
