@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`79ff4f2da20ae80a7513f1198d7002a84e72a396`. Paths in the first column are relative
+`0d98aa07776db6d38ca5d8bcaf4e10f80c39ed04`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -14,9 +14,44 @@ to MCP 1.11. The stdio hooks continue to use the existing child-process contract
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
 tests in the [reference contract anchors](#reference-contract-anchors). The latest review covers
-[managed skills and ACP session setup](#managed-skills-and-acp-session-setup).
+[project Presets and development environment commands](#project-presets-and-development-environment-commands).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Project Presets and development environment commands
+
+Reviewed November 24, 2026 from OpenCode `6a8077b2f58` and Nexus UI `27fef8c0`.
+The Rho changes from `79ff4f2da` to `0d98aa077` affect two READMEs.
+
+- The experimental Nexus management command `preset.import-project` uses the active runner root.
+  It visits immediate Markdown and JSON files in sorted order under `.agents/agents`, then
+  `.claude/agents`. Its optional `names` list matches Preset names. Each scan imports the first
+  valid document for each selected name and returns `imported`, `skipped` paths with reasons,
+  and `missing` requested names. A missing root yields an empty scan. A subsequent import creates
+  new catalog identities. OpenCode publishes the accepted batch in one catalog write.
+- The development CLI checks the MCP file is a JSON array and requires a port endpoint and token
+  before dispatch. The CLI regression counts zero target lookups and zero binds for malformed input.
+  The `environments` command prints an explicit empty listing and reports each mounted server's
+  public name, state and fault. JSON callers get structured server rows alongside tool names
+  and validation issues. Literal `--mcp '[]'` closes mounts and `port ID --clear` detaches the port.
+- On Nexus at port 3000, the source-built OpenCode service imported from an isolated project,
+  reported a malformed file, accepted a later valid definition of the same name and reported a
+  missing requested name. Both exported formats passed through the live catalog with the Unicode
+  prompt, trailing newline, inherited tools and explicit empty lists intact. The source development
+  CLI displayed a connected zero-tool HTTP MCP peer alongside a failed SSE mount and its reason.
+  Rejected commands preserved the mounts. Both detach commands succeeded. The installed service
+  supplied the comparison export at UI port 4779. The disposable catalogs, workspaces and credentials
+  were retired and the installed service remained ready.
+
+The [reference contract anchors](#reference-contract-anchors) passed 754 Ruby cases across all eleven
+packages, including the shared runner test definitions. The production TypeScript owners passed
+460 conformance cases across 79 files using Chromium, PTYs and WebRTC. The Linux-only filename-byte
+case skipped on macOS. The runs cover application admission and recovery, runner execution and
+terminals, Code Mode, MCP, browser control, web fetch, both ACP directions, Telegram, T3 and the
+development terminal. ACP, Telegram, T3 and external web-provider protocol cases used local peers.
+The runtime build and package, both runtime type checks, affected CLI and Server tests, protocol
+identifiers and root `bun run check` passed. The management change required regenerating the
+OpenCode client and OpenAPI document. The existing Cybros TypeScript SDK handled the live workflows.
 
 ## Managed skills and ACP session setup
 

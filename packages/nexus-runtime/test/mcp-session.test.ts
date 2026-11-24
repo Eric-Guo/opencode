@@ -238,6 +238,9 @@ it.live("session MCP uses public names and replacement cancels an accepted block
       try {
         const first = await table.bind(input)
         expect(first.issues).toEqual(["My Server: broken: Invalid object JSON Schema"])
+        expect(table.environment("workspace", "anchor")).toMatchObject({
+          servers: [{ name: "My Server", transport: "http", state: "connected", fault: null }],
+        })
         expect(first.tools).toHaveLength(1)
         expect(first.tools[0]).toStartWith("mcp__My_Server__read_")
         const running = table.tools()[0].execute(
@@ -279,6 +282,9 @@ it.live("session MCP uses public names and replacement cancels an accepted block
         const crowded = await table.bind(input)
         expect(crowded.tools).toEqual([])
         expect(crowded.issues[0]).toContain("65536 byte budget")
+        expect(table.environment("workspace", "anchor")).toMatchObject({
+          servers: [{ name: "My Server", state: "down", fault: expect.stringContaining("65536 byte budget") }],
+        })
         expect(await Effect.runPromise(mcp.servers())).toEqual([])
       } finally {
         released.resolve()
