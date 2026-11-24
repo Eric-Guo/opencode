@@ -3,7 +3,7 @@ import { parseDocument } from "yaml"
 import { Schema } from "effect"
 import { NexusPreset } from "@opencode/schema/nexus-preset"
 
-export function readPreset(content: string, format: "md" | "json", filename = "preset.md") {
+export function readPreset(content: string, format: "md" | "json", filename = "preset.md", name?: string) {
   if (Buffer.byteLength(content) > 1024 * 1024) throw new Error("Preset document exceeds 1 MiB.")
 
   const front = format === "md" ? /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content) : null
@@ -62,7 +62,7 @@ export function readPreset(content: string, format: "md" | "json", filename = "p
   if (body) configuration.system_prompt = body
 
   return Schema.decodeUnknownSync(NexusPreset.Authored, { onExcessProperty: "error" })({
-    name: fields.name ?? basename(filename, extname(filename)),
+    name: name ?? fields.name ?? basename(filename, extname(filename)),
     description: fields.description,
     configuration,
   })

@@ -3,7 +3,7 @@ import { Schema } from "effect"
 import type { AnnouncedTool } from "@cybros/agent"
 import type { HostTools } from "./host"
 import type { RunnerTool } from "./extensions"
-import { activateMcp } from "./mcp"
+import { activateMcp, type McpReport } from "./mcp"
 import { mcpSettings } from "./mcp-settings"
 
 const Pair = Schema.Struct({ name: Schema.NonEmptyString, value: Schema.String })
@@ -26,6 +26,13 @@ export const EditorMcpServers = Schema.Array(
   ]),
 )
 
+export type EditorMcpSession = {
+  tools: RunnerTool[]
+  issues: string[]
+  servers?: { name: string; transport: string; state: string; fault: string | null }[]
+  close(): Promise<void>
+}
+
 export async function mcpSession(
   input: {
     workspace: string
@@ -36,7 +43,7 @@ export async function mcpSession(
     ledger?: readonly AnnouncedTool[]
   },
   host: Pick<HostTools, "mcp" | "integration">,
-) {
+): Promise<EditorMcpSession> {
   const entries = Schema.decodeUnknownSync(EditorMcpServers)(input.servers)
 
   if (new Set(entries.map((entry) => entry.name)).size !== entries.length)
@@ -107,6 +114,7 @@ export async function mcpSession(
 
   input.signal.addEventListener("abort", onAbort, { once: true })
   try {
+    const reports: McpReport[] = []
     await activateMcp(
       {
         directory: input.directory,
@@ -169,12 +177,22 @@ export async function mcpSession(
       host,
       settings,
       { agent: input.ledger ?? [], runner: [] },
+      reports,
     )
     input.signal.throwIfAborted()
 
     issues.push(...diagnostics.read().issues)
     return {
       tools,
+      servers: entries.map((entry) => {
+        const report = reports.find((row) => (names.get(row.server) ?? row.server) === entry.name)
+        return {
+          name: entry.name,
+          transport: entry.type ?? "stdio",
+          state: report?.status === "connected" ? "connected" : "down",
+          fault: report ? (report.issue ?? null) : "transport " + entry.type + " unsupported",
+        }
+      }),
       issues: issues.map((issue) => [...names].reduce((text, [key, name]) => text.replaceAll(key, name), issue)),
       close,
     }

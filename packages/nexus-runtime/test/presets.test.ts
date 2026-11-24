@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { Schema } from "effect"
 import { toolAlias } from "@cybros/agent"
 import { StoreDocument } from "../src/document"
@@ -37,6 +40,65 @@ test("portable Presets preserve authored configuration without identity and acce
     "Unsupported Preset fields",
   )
   expect(() => readPreset("---\nname: x\ndescription: &text words\nconfiguration: *text\n---\n", "md")).toThrow()
+})
+
+test("project imports use the first valid selected file and portable exports round-trip through the catalog", async () => {
+  const fixture = storeFixture()
+  const presets = new Presets(fixture.client)
+  const root = await mkdtemp(join(tmpdir(), "nexus-project-presets-"))
+  try {
+    const first = join(root, ".agents/agents")
+    const second = join(root, ".claude/agents")
+    await mkdir(join(first, "nested"), { recursive: true })
+    await mkdir(second, { recursive: true })
+    const value = {
+      description: "Review",
+      configuration: { system_prompt: "你好\n", fallback_models: [], tools: null },
+    }
+    await Bun.write(join(first, "bad.md"), "---\nname: Later\ndescription: []\n---\n")
+    await Bun.write(join(first, "Checker.json"), JSON.stringify(value))
+    await Bun.write(join(first, "nested", "Deep.json"), JSON.stringify(value))
+    await Bun.write(join(first, "Notes.txt"), JSON.stringify(value))
+    await Bun.write(join(second, "Checker.json"), JSON.stringify({ description: "Second" }))
+    await Bun.write(join(second, "Later.json"), JSON.stringify(value))
+    await Bun.write(join(second, "Other.json"), JSON.stringify(value))
+    const names = ["Checker", "Later", "Deep", "Notes"]
+    const result = await presets.command({ action: "preset.import-project", names }, root)
+    expect(result).toMatchObject({
+      imported: [
+        { name: "Checker", ...value },
+        { name: "Later", ...value },
+      ],
+      skipped: [{ path: join(first, "bad.md"), reason: expect.any(String) }],
+      missing: ["Deep", "Notes"],
+    })
+    expect((await presets.catalog()).presets.some((entry) => entry.name === "Other")).toBe(false)
+    const saved = (await presets.catalog()).presets.at(-1)!
+    for (const format of ["md", "json"] as const) {
+      const content = await presets.command({ action: "preset.export-document", id: saved.public_id, format })
+      expect(typeof content).toBe("string")
+      const entry = await presets.command({
+        action: "preset.import-document",
+        name: "Copy",
+        format,
+        content: String(content),
+      })
+      expect(entry).toMatchObject({ name: "Copy", ...value, role: null })
+    }
+    for (const dir of [undefined, join(root, "absent")]) {
+      expect(await presets.command({ action: "preset.import-project", names }, dir)).toEqual({
+        imported: [],
+        skipped: [],
+        missing: names,
+      })
+    }
+    expect(await presets.command({ action: "preset.import-project" }, root)).toMatchObject({
+      imported: [{ name: "Checker" }, { name: "Later" }, { name: "Other" }],
+    })
+  } finally {
+    fixture.server.stop(true)
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test("Preset defaults change atomically and importing a document never publishes its role", async () => {

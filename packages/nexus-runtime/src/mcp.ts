@@ -20,6 +20,8 @@ const Command = Schema.Struct({
   cancel: Schema.optional(Schema.Boolean),
 })
 
+export type McpReport = Record<string, Schema.Json> & { server: string; status: string; issue?: string }
+
 /** Nexus owns the declarations and scoped settings; OpenCode owns transports and credentials. */
 export async function activateMcp(
   api: ExtensionAPI,
@@ -29,16 +31,13 @@ export async function activateMcp(
     agent: api.announced?.("agent") ?? [],
     runner: api.announced?.("runner") ?? [],
   },
+  reports: McpReport[] = [],
 ) {
   const mcp = await host.mcp(api.directory)
   const scope = await Effect.runPromise(Scope.make())
   const skippedSchemas: string[] = []
   const issues = settings.faults.map((fault) => fault.key + ": " + fault.issue)
-  const reports: Record<string, Schema.Json>[] = settings.faults.map((fault) => ({
-    server: fault.key,
-    status: "down",
-    issue: fault.issue,
-  }))
+  for (const fault of settings.faults) reports.push({ server: fault.key, status: "down", issue: fault.issue })
   const credentials = new Map<string, string[]>()
   const staticSecrets = new Map([...settings.rows, ...settings.probes.values()].map((row) => [row.server, row.secrets]))
   const refreshSecrets = async (row: McpRow, name = row.server) => {
@@ -139,7 +138,7 @@ export async function activateMcp(
   for (const row of settings.rows) {
     await refreshSecrets(row).catch(() => {})
     const server = servers.find((server) => server.name === row.server)
-    const report: Record<string, Schema.Json> = {
+    const report: McpReport = {
       server: row.key,
       transport: row.transport,
       serves: row.role,
