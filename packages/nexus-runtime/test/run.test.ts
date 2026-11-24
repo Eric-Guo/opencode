@@ -124,6 +124,9 @@ for (const scenario of [
                     type: "input_blocked",
                     sequence: 1,
                     public_id: "event",
+                    cursor: "blocked",
+                    resource: { type: "conversation", public_id: "conversation" },
+                    occurred_at: "2026-11-18T00:00:00Z",
                     payload: { input_public_id: "input", blocked_reason: "unknown_model" },
                   },
                 ]
@@ -266,6 +269,7 @@ for (const scenario of [
                 : 1,
       })
       if (status === "completed") expect(result.result).toBe("Own answer")
+      if (status === "blocked") expect(result.reason).toBe("unknown_model")
       if (scenario === "refused-denial") {
         expect(result).toMatchObject({
           subtype: "needs_person",

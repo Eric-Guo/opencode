@@ -256,10 +256,10 @@ export default Runtime.handler(
                 ),
               ).input.public_id
             },
-            skills: async () =>
+            skills: async (signal) =>
               Schema.decodeUnknownSync(
                 Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),
-              )(await nexus.manage({ payload: { action: "application.skills" } })),
+              )(await nexus.manage({ payload: { action: "application.skills" } }, { signal })),
             approve: async (approval, signal) => {
               const token = await authentication.credential()
 
