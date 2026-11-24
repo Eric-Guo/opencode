@@ -1208,7 +1208,7 @@ test("skill publication carries the observed revision and never retries a confli
   const reads: string[] = []
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
-    if (path.endsWith("/memory_collections"))
+    if (path.endsWith("/profile/memory_collections"))
       return Response.json({
         memory_collections: [
           {
@@ -1290,6 +1290,100 @@ test("skill publication carries the observed revision and never retries a confli
     ])
   } finally {
     fixture.server.stop(true)
+  }
+})
+
+test("development skill commands use the selected collection and preserve the document output", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-skill-push-"))
+  const skill = join(directory, "example")
+  const writes: unknown[] = []
+  const row = {
+    collection_public_id: "collection",
+    public_id: "document",
+    lock_version: 1,
+    path: "skills/example",
+    content: "Café\n",
+    bytesize: 6,
+    description: "Example",
+    written_at: "now",
+  }
+  let refusal: string | undefined = "workspace_not_found"
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/workspaces/workspace/memory_collections"))
+      return Response.json({
+        memory_collections: [
+          {
+            public_id: "collection",
+            scope: "workspace",
+            name: null,
+            description: null,
+            owner_public_id: "workspace",
+            is_default: true,
+            lock_version: 0,
+            created_at: "now",
+            updated_at: "now",
+            writable: true,
+            manageable: true,
+          },
+        ],
+        pagination: { next_after: null },
+      })
+    if (path.endsWith("/collection/documents/show"))
+      return refusal ? Response.json({ error: { code: refusal } }, { status: 404 }) : Response.json({ memory: row })
+
+    if (path.endsWith("/collection/documents") || path.endsWith("/collection/documents/delete")) {
+      writes.push(await request.json())
+      return path.endsWith("/delete")
+        ? new Response(null, { status: 204 })
+        : Response.json({ memory: row }, { status: 201 })
+    }
+    return Response.json({ error: { code: "unexpected_request" } }, { status: 400 })
+  })
+  const app = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", runner: "runner", agent: "main" },
+    () => ({}),
+  )
+  const command = async (...args: string[]) => {
+    const output: string[] = []
+    await runDevelopment(["skills", ...args, "--scope", "workspace"], {
+      signal: new AbortController().signal,
+      command: async (input) => json(JSON.stringify(await app.operations.command(input))),
+      write: (value) => {
+        output.push(value.toString())
+      },
+      error() {},
+    })
+    return output.join("")
+  }
+  try {
+    await mkdir(skill)
+    await writeFile(join(skill, "SKILL.md"), "---\ndescription: Example\n---\nCafé\n")
+    await expect(command("push", skill)).rejects.toMatchObject({ code: "workspace_not_found" })
+    refusal = "memory_not_found"
+    await expect(command("rm", "example")).rejects.toMatchObject({ code: "memory_not_found" })
+    expect(writes).toEqual([])
+    expect(await command("push", skill)).toBe("pushed:    skills/example (6 bytes)\n")
+    refusal = undefined
+    expect(await command("show", "example")).toBe("Café\n")
+    expect(json(await command("show", "example", "--json"))).toMatchObject(row)
+    expect(await command("rm", "example")).toBe("")
+    expect(writes).toEqual([
+      {
+        memory: {
+          path: row.path,
+          description: row.description,
+          content: row.content,
+          expected_public_id: null,
+          expected_lock_version: null,
+        },
+      },
+      { memory: { path: row.path, expected_public_id: "document", expected_lock_version: 1 } },
+    ])
+  } finally {
+    fixture.server.stop(true)
+    await rm(directory, { recursive: true, force: true })
   }
 })
 

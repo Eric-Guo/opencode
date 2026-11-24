@@ -432,13 +432,22 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     const scope = parsed.text("scope") ?? "agent"
     if (action === "push") {
       const skill = await readSkill(join(resolve(word(1, "DIRECTORY")), "SKILL.md"))
-      print(await call("skill.push", { scope, name: skill.name, description: skill.description, content: skill.body }))
+      const row = object(
+        await call("skill.push", { scope, name: skill.name, description: skill.description, content: skill.body }),
+      )
+
+      if (parsed.values.json) print(row)
+      else terminal.write(`pushed:    ${row.path} (${row.bytesize} bytes)\n`)
+
       return 0
     }
     if (!["show", "rm"].includes(action)) throw new Error("skills takes push, show or rm.")
     const result = await call(action === "show" ? "skill.show" : "skill.remove", { scope, name: word(1, "NAME") })
-    if (action === "show" && !parsed.values.json) terminal.write(String(object(result).content ?? "") + "\n")
-    else print(result)
+    if (parsed.values.json) print(result)
+    else if (action === "show") {
+      const body = Schema.decodeUnknownSync(Schema.Struct({ content: Schema.String }))(result).content
+      terminal.write(body.endsWith("\n") ? body : body + "\n")
+    }
     return 0
   }
   if (parsed.verb === "prompt") {
