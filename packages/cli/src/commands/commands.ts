@@ -634,6 +634,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           "logout",
           "schedules",
           "jobs",
+          "persona",
           "web-fetch",
           "memory",
           "mcp",
@@ -643,7 +644,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           "run",
         ]).pipe(Argument.withDefault("status")),
         prompt: Argument.String("prompt | conversation | URL").pipe(Argument.optional),
-        words: Argument.String("job arguments").pipe(Argument.variadic({ min: 0 })),
+        words: Argument.String("arguments").pipe(Argument.variadic({ min: 0 })),
         raw: Flag.Boolean("raw").pipe(
           Flag.withDescription("Print web-fetch output as rendered bytes"),
           Flag.withDefault(false),
