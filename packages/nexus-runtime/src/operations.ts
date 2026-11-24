@@ -15,6 +15,7 @@ import {
   type TurnPage,
 } from "@cybros/agent"
 import { approvalGrant } from "./approval-grant"
+import { listTerminalRuns } from "./terminal-runs"
 import { SkillOperation, skillOperation } from "./operation-skills"
 import type { NexusApplication } from "./application"
 
@@ -84,6 +85,7 @@ export const Operation = Schema.Union([
     representation: Schema.optional(Schema.Literals(["thumbnail", "preview"])),
   }),
   Schema.Struct({ action: Schema.Literal("prompt.show"), slot: Schema.optional(Schema.String) }),
+  Schema.Struct({ action: Schema.Literal("terminal.list"), workspace: Schema.optional(Schema.NonEmptyString), ...Page }),
   Schema.Struct({
     action: Schema.Literal("terminal.open"),
     workspace: Schema.optional(Schema.NonEmptyString),
@@ -381,6 +383,7 @@ export class Operations {
     const workspace = this.member.workspace(selected)
 
     if (input.action === "identity") return this.identity
+    if (input.action === "terminal.list") return listTerminalRuns(workspace, input.after, options)
     if (input.action === "followers") {
       const conversations = await Promise.all(
         this.application.lifecycle.hostsSnapshot().map(async (host) => ({
