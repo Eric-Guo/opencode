@@ -14,9 +14,40 @@ to MCP 1.11. The stdio hooks continue to use the existing child-process contract
 
 The eleven executable non-WebUI packages have TypeScript owners and contract
 tests in the [reference contract anchors](#reference-contract-anchors). The latest review covers
-[personal instructions and delegated work](#personal-instructions-and-delegated-work).
+[managed skills and ACP session setup](#managed-skills-and-acp-session-setup).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Managed skills and ACP session setup
+
+Reviewed November 24, 2026 against Cybros `79ff4f2da` in the OpenCode working tree based on `fef04675d02`.
+
+- The `rho` Ops skill routes and `rho-dev/test/dev_skills_test.rb` map to `src/operation-skills.ts` and the
+  development terminal. Show, push and remove read the selected scope's default collection. Only a
+  `memory_not_found` read permits creation. The HTTP fixture observes zero writes on a workspace refusal
+  or missing removal and checks the document ID and lock version on mutation. Text output reports the
+  saved path and byte count, prints the body with its original trailing newline, and is silent on removal.
+- The `rho-env/test/skills_test.rb` discovery case maps to `src/skills.ts`. A nested-only directory, an
+  empty directory, a loose file and a hidden entry produce no reported skills or diagnostics.
+  Malformed documents and duplicate names remain visible in the runner's diagnostics.
+- The `rho-acp` methods suite maps to `src/editor.ts`. History replay finishes before the load response.
+  New, load and resume return before the skill roster arrives. A blocked admission reaches the editor
+  as invalid parameters with the kernel reason. ACP and one-shot CLI tests both exercise a complete
+  `input_blocked` event with the reason `unknown_model`.
+
+On Nexus at `localhost:3000`, the source development terminal and built runtime created and replaced a
+workspace skill in a private workspace. A six-byte body kept its trailing newline. Replacement retained
+the ID and advanced the version. Removal printed zero bytes and a subsequent read returned
+`memory_not_found`. An ACP peer resumed a conversation while the catalog was pending, then received the
+workspace skill. An input naming an unavailable provider reached the peer as `-32602` with
+`unknown_provider`. The installed service supplied the original pairing. After cleanup it reported ready
+in its original workspace and the deleted workspace returned HTTP 404.
+
+Runtime conformance passed 458 tests with Chromium, PTY and WebRTC. The Linux-only filename case
+skipped on macOS. Selected Ruby suites passed 386 cases across all eleven runtime packages, covering
+Ops, runner claims and file edits, Code Mode, MCP curation and refresh, browser lifecycle, web rendering,
+ACP and delegation, Telegram recovery, T3 work and development commands. The [WebUI review](../nexus-ui/docs/rho-webui-parity.md#memory-binding-names-and-collection-identity)
+records the Human-facing checks.
 
 ## Personal instructions and delegated work
 

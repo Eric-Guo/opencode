@@ -19,7 +19,7 @@ import {
   type Model,
   type Turn,
 } from "@cybros/agent"
-import { setTimeout } from "node:timers/promises"
+import { setImmediate, setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
 import type { Status } from "./runtime"
 import { authenticateEditor, type EditorAuthentication } from "./editor-auth"
@@ -58,7 +58,7 @@ export type EditorOptions = {
     },
     signal: AbortSignal,
   ) => Promise<string>
-  skills?: () => Promise<readonly { name: string; description: string }[]>
+  skills?: (signal?: AbortSignal) => Promise<readonly { name: string; description: string }[]>
   approve?: (
     input: { conversation: string; run: string; task: string; always: boolean },
     signal: AbortSignal,
@@ -198,7 +198,8 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       while (!signal.aborted) {
         const snapshot = await execution.recover({ signal }).then(executionSnapshot)
 
-        if (execution.blocked_reason) throw new RequestError(-32603, execution.blocked_reason)
+        if (execution.blocked_reason)
+          throw RequestError.invalidParams(undefined, "Nexus blocked the input (" + execution.blocked_reason + ").")
         if (snapshot) transcript.execution(snapshot.execution)
         if (snapshot && !watcher) {
           watcher = (async () => {
@@ -547,6 +548,22 @@ export async function editor(stream: Stream, status: Status, token: string, opti
         }
     }
 
+    void announceCommands(id, session, peer, connection.signal).catch(() => {})
+    restoreQuestion(id, session, peer)
+    return {
+      modes: { currentModeId: session.mode, availableModes: modes },
+      configOptions: config(session),
+      ...(issues?.length ? { _meta: { "opencode.mcp.issues": issues } } : {}),
+    }
+  }
+  async function announceCommands(id: string, session: Session, peer: AgentContext, signal: AbortSignal) {
+    // The SDK queues the attach response when its handler returns. Editors need the session ID first.
+    await setImmediate(undefined, { signal })
+    if (sessions.get(id) !== session) return
+
+    const skills = (await options.skills?.(signal).catch(() => [])) ?? []
+    if (signal.aborted || sessions.get(id) !== session) return
+
     await peer.notify("session/update", {
       sessionId: id,
       update: {
@@ -555,19 +572,10 @@ export async function editor(stream: Stream, status: Status, token: string, opti
           { name: "retry", description: "Retry the holding task." },
           { name: "abandon", description: "Abandon the holding task." },
           { name: "compact", description: "Compact this conversation." },
-          ...((await options.skills?.().catch(() => [])) ?? []).filter(
-            (skill) => !["retry", "abandon", "compact"].includes(skill.name),
-          ),
+          ...skills.filter((skill) => !["retry", "abandon", "compact"].includes(skill.name)),
         ],
       },
     })
-
-    restoreQuestion(id, session, peer)
-    return {
-      modes: { currentModeId: session.mode, availableModes: modes },
-      configOptions: config(session),
-      ...(issues?.length ? { _meta: { "opencode.mcp.issues": issues } } : {}),
-    }
   }
   const save = async (id: string, patch: JsonObject, signal: AbortSignal) => {
     const chat = nexus.workspace.conversation(id)
