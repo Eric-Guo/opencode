@@ -372,16 +372,31 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
   if (["environment", "environments", "port"].includes(parsed.verb)) {
     if (!terminal.extension) throw new Error("Environment commands are unavailable.")
     if (parsed.verb === "environments") {
-      print(await terminal.extension("environments", {}))
+      const result = await terminal.extension("environments", {})
+      if (parsed.values.json) print(result)
+      else {
+        const rows = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(result)
+        terminal.write(
+          rows.length
+            ? rows.map(formatEnvironment).join("\n")
+            : "No followed conversation has an environment record.\n",
+        )
+      }
       return 0
     }
-    const id = await conversation(word(0, "CONVERSATION"))
+    const host = word(0, "CONVERSATION")
+    if (parsed.verb === "port" && !parsed.values.clear && (!parsed.text("endpoint") || !parsed.text("token")))
+      throw new Error("port requires --endpoint and --token or --clear.")
+
     const mcp = parsed.text("mcp")
-    const servers = mcp
-      ? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(
-          mcp === "[]" ? mcp : await readFile(mcp, "utf8"),
-        )
-      : undefined
+    const servers =
+      mcp === undefined
+        ? undefined
+        : Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.MutableJson)))(
+            mcp === "[]" ? mcp : await readFile(mcp, "utf8"),
+          )
+    if (servers?._tag === "None")
+      throw new Error("--mcp requires a JSON file containing an array of MCP servers, or [].")
     const fields =
       parsed.verb === "port"
         ? {
@@ -398,15 +413,15 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
         : {
             root: parsed.values.clear ? null : parsed.args[1] ? resolve(parsed.args[1]) : undefined,
             directories: parsed.values.also?.map((path) => resolve(path)),
-            mcp: servers,
+            mcp: servers?.value,
           }
     const change = clean(fields)
-    print(
-      await terminal.extension(Object.keys(change).length ? "environment.bind" : "environment.read", {
-        conversation: id,
-        ...change,
-      }),
-    )
+    const result = await terminal.extension(Object.keys(change).length ? "environment.bind" : "environment.read", {
+      conversation: await conversation(host),
+      ...change,
+    })
+    if (parsed.values.json) print(result)
+    else terminal.write(formatEnvironment(object(result)))
     return 0
   }
   if (parsed.verb === "fetch") {
@@ -970,6 +985,32 @@ async function turnID(
   )
   if (!turn) throw new Error("Turn " + reference + " does not exist.")
   return String(turn.public_id)
+}
+
+function formatEnvironment(row: JsonObject) {
+  const { mcp, ...fields } = row
+  const report = mcp && !Array.isArray(mcp) ? object(mcp) : undefined
+  const servers = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        state: Schema.String,
+        fault: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  )(Array.isArray(mcp) ? mcp : (report?.servers ?? []))
+
+  return (
+    formatDevelopment(fields) +
+    [
+      ...servers.map(
+        (server) => "mcp: " + server.name + "  " + server.state + (server.fault ? " — " + server.fault : ""),
+      ),
+      ...(report && !report.servers ? [formatDevelopment(report).trimEnd()] : []),
+    ]
+      .map((line) => line + "\n")
+      .join("")
+  )
 }
 
 function formatSkills(skills: JsonObject) {

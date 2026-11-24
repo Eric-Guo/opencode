@@ -1,5 +1,7 @@
 import { APIError, toolAlias, type Client, type AgentConfigurationInput, type ToolAlias } from "@cybros/agent"
 import { randomBytes } from "node:crypto"
+import { readFile } from "node:fs/promises"
+import { Glob } from "@opencode/util/glob"
 import { Schema } from "effect"
 import { NexusPreset } from "@opencode/schema/nexus-preset"
 import { StoreDocument } from "./document"
@@ -111,7 +113,7 @@ export class Presets {
       })
   }
 
-  async command(command: NexusPreset.Command) {
+  async command(command: NexusPreset.Command, projectRoot?: string) {
     if (command.action === "preset.tools") {
       const inventory = await this.readInventory()
       return {
@@ -130,6 +132,32 @@ export class Presets {
     const catalog = await this.catalog()
 
     if (command.action === "preset.list") return catalog
+    if (command.action === "preset.import-project") {
+      const imported = new Map<string, NexusPreset.Entry>()
+      const skipped: NexusPreset.ProjectImport["skipped"] = []
+      const files = projectRoot
+        ? await Glob.scan("{.agents,.claude}/agents/*.{md,json}", { cwd: projectRoot, absolute: true })
+        : []
+
+      for (const path of files.sort()) {
+        try {
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(await readFile(path))
+          const value = readPreset(text, path.endsWith(".json") ? "json" : "md", path)
+          if (command.names && !command.names.includes(value.name)) continue
+          if (imported.has(value.name)) continue
+
+          imported.set(value.name, { ...authored(value), public_id: createID(), role: null })
+        } catch (error) {
+          skipped.push({ path, reason: error instanceof Error ? error.message : String(error) })
+        }
+      }
+
+      const entries = [...imported.values()]
+      if (entries.length)
+        await this.document.change((current) => ({ ...current!, presets: [...current!.presets, ...entries] }))
+
+      return { imported: entries, skipped, missing: command.names?.filter((name) => !imported.has(name)) ?? [] }
+    }
     if (command.action === "preset.defaults") {
       return this.document.change((current) => {
         if (command.main_preset_public_id) find(current!, command.main_preset_public_id)
@@ -149,7 +177,7 @@ export class Presets {
     ) {
       const value =
         command.action === "preset.import-document"
-          ? readPreset(command.content, command.format, command.filename)
+          ? readPreset(command.content, command.format, command.filename, command.name)
           : command.value
       const entry = { ...authored(value), public_id: createID(), role: null }
 
