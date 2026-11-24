@@ -9,7 +9,7 @@ import { ServerConnection } from "../../services/server-connection"
 export default Runtime.handler(
   Commands.commands.nexus,
   Effect.fn("cli.nexus")(function* (input) {
-    if (input.words.length && input.action !== "jobs")
+    if (input.words.length && input.action !== "jobs" && input.action !== "persona")
       return yield* Effect.fail(new Error("Unexpected positional arguments."))
     if (input.action === "web-fetch") {
       if (Option.isNone(input.prompt)) return yield* Effect.fail(new Error("Use opencode nexus web-fetch URL [--raw]."))
@@ -26,6 +26,16 @@ export default Runtime.handler(
     const server = yield* ServerConnection.resolve({ mismatch: "ignore" })
     const nexus = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
       .experimental.nexus
+    if (input.action === "persona") {
+      return yield* Effect.tryPromise(async () => {
+        const { runPersona } = await import("@opencode/nexus-runtime/persona")
+        const args = [...Option.toArray(input.prompt), ...input.words]
+        await runPersona(args, input.outputFormat === "json", (payload) => nexus.manage({ payload })).then(
+          (result) => process.stdout.write(result),
+          reportError,
+        )
+      })
+    }
     if (input.action === "jobs") {
       if (Option.isNone(input.prompt))
         return yield* Effect.fail(new Error("Use opencode nexus jobs CONVERSATION [ACTION ...]."))
