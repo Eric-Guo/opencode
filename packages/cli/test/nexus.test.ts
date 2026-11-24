@@ -63,7 +63,7 @@ test("Nexus ACP parses launch mode, model and runner independently of pairing op
   expect(received).toEqual([{ action: "acp", mode: "rules", model: "provider/model", runner: "remote" }])
 })
 
-test("jobs keeps schedule arguments after the conversation and web-fetch accepts raw output", async () => {
+test("jobs, web-fetch and persona preserve their positional arguments and flags", async () => {
   const parsed: unknown[] = []
   const command = Commands.commands.nexus.spec.pipe(
     Command.withHandler((input) =>
@@ -75,6 +75,7 @@ test("jobs keeps schedule arguments after the conversation and web-fetch accepts
   for (const argv of [
     ["jobs", "chat", "create", "every", "2h", "Review the build"],
     ["web-fetch", "https://example.test", "--raw"],
+    ["persona", "set", "-"],
   ])
     await Effect.runPromise(
       Command.runWith(command, { version: "test" })(argv).pipe(Effect.provide(NodeServices.layer)),
@@ -82,5 +83,6 @@ test("jobs keeps schedule arguments after the conversation and web-fetch accepts
   expect(parsed).toEqual([
     ["jobs", "chat", ["create", "every", "2h", "Review the build"], false],
     ["web-fetch", "https://example.test", [], true],
+    ["persona", "set", ["-"], false],
   ])
 })
