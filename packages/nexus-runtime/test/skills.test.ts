@@ -15,6 +15,8 @@ test("skill scanning keeps source precedence, validates frontmatter and exposes 
       ".claude/skills/review",
       ".claude/skills/wrong",
       ".agents/skills/nested/child",
+      ".agents/skills/empty",
+      ".agents/skills/.hidden",
     ])
       await mkdir(join(root, directory), { recursive: true })
     const path = join(root, ".agents/skills/review/SKILL.md")
@@ -25,6 +27,8 @@ test("skill scanning keeps source precedence, validates frontmatter and exposes 
       "---\nname: different\ndescription: mismatched\n---\nBody",
     )
     await writeFile(join(root, ".agents/skills/nested/child/SKILL.md"), "---\ndescription: nested\n---\nBody")
+    await writeFile(join(root, ".agents/skills/README.md"), "Directory notes")
+    await writeFile(join(root, ".agents/skills/.hidden/SKILL.md"), "---\ndescription: hidden\n---\nBody")
     const catalog = await scanSkills(root)
     expect(catalog.skills.map((skill) => skill.name)).toEqual(["review"])
     expect(catalog.skills[0].description).toBe("Review code")
@@ -32,7 +36,10 @@ test("skill scanning keeps source precedence, validates frontmatter and exposes 
     expect((await readWindow(path, new AbortController().signal, catalog.skills[0].bodyLine)).content).toBe(
       "First instruction\nSecond instruction",
     )
-    expect(catalog.skipped.some((entry) => entry.reason.includes("already announced"))).toBe(true)
+    expect(catalog.skipped).toEqual([
+      { path: join(root, ".claude/skills/review/SKILL.md"), reason: expect.stringContaining("already announced") },
+      { path: join(root, ".claude/skills/wrong/SKILL.md"), reason: expect.stringContaining("match its directory") },
+    ])
     for (const name of ["name: null\n", "", "name: review\n"]) {
       await writeFile(path, "---\n" + name + "description: Review code\n---\nBody")
       expect((await readSkill(path)).name).toBe("review")
