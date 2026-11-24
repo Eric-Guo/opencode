@@ -72,6 +72,7 @@
       "cache": false
     },
     "@opencode/sdk#verify:package": {
+      "env": ["NPM_CONFIG_REGISTRY"],
       "outputs": []
     }
   }
