@@ -1237,7 +1237,6 @@
     "@babel/core@7.29.7": "patches/@babel%2Fcore@7.29.7.patch",
     "@pierre/trees@1.0.0-beta.6": "patches/@pierre%2Ftrees@1.0.0-beta.6.patch",
     "vite@8.2.4": "patches/vite@8.2.4.patch",
-    "psychoscript@0.3.0": "patches/psychoscript@0.3.0.patch",
     "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch",
     "app-builder-lib@26.15.7": "patches/app-builder-lib@26.15.7.patch",
     "gcp-metadata@8.1.4": "patches/gcp-metadata@8.1.4.patch",
