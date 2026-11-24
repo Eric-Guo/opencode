@@ -69,6 +69,12 @@ Use `pause`, `resume`, `run` or `cancel` with a job ID. A create accepts `--mode
 and each command accepts `--workspace`. Edits read the current lock version before
 submitting the changed fields. `opencode nexus schedules` lists jobs across the workspace.
 
+Use `opencode nexus persona` or `opencode nexus persona show` to read the signed-in
+Human's instructions for future personal turns. `persona set FILE` accepts up to
+64 KiB of UTF-8 text. Use `persona set -` for standard input and `persona reset`
+to clear the document. Each accepts `--output-format json`. An absent document
+reads as JSON `null`.
+
 `opencode nexus web-fetch URL [--raw]` uses the local Web reader configuration and
 works while disconnected. It writes the whole rendering or the original binary to
 stdout and the HTTP status line to stderr. A refusal writes its explanation to stderr

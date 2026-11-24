@@ -1169,6 +1169,24 @@ export class NexusRuntime {
       if (!this.settings) throw new Error("Configure a Nexus origin first.")
       return this.human.request(this.settings.origin, command)
     }
+    if (command.action === "persona.read" || command.action === "persona.write" || command.action === "persona.reset") {
+      if (!this.settings) throw new Error("Configure a Nexus origin first.")
+      if (command.action === "persona.write" && Buffer.byteLength(command.content) > 65536)
+        throw new Error("Persona exceeds 64 KiB.")
+
+      const platform = await this.human.platform(this.settings.origin)
+      if (command.action === "persona.write") return platform.persona.write({ content: command.content })
+
+      const result =
+        command.action === "persona.read"
+          ? platform.persona.read()
+          : platform.persona.delete().then(() => ({ reset: true }))
+
+      return result.catch((error: unknown) => {
+        if (error instanceof APIError && error.status === 404 && error.code === "prompt_document_not_found") return null
+        throw error
+      })
+    }
     if (command.action === "extension.configure") return this.configureExtension(command.change)
     if (command.action === "extension.call") {
       if (command.name === "application.upload") {
@@ -1314,18 +1332,6 @@ export class NexusRuntime {
     }
     if (command.action.startsWith("bot.") && command.action !== "bot.submit")
       return active.application.bots.command(command as NexusBot.Command)
-    if (command.action === "persona.read" || command.action === "persona.write" || command.action === "persona.reset") {
-      const platform = await this.human.platform(this.settings.origin)
-
-      if (command.action === "persona.read") return platform.persona.read()
-      if (command.action === "persona.reset") {
-        await platform.persona.delete()
-        return null
-      }
-      if (Buffer.byteLength(command.content) > 65536) throw new Error("Persona exceeds 64 KiB.")
-
-      return platform.persona.write({ content: command.content })
-    }
     if (token && origin !== this.settings.origin)
       throw new Error("The Human credential requires the paired Nexus origin.")
     const member = token ? new Client({ baseURL: this.settings.origin, credential: token }) : active.member
