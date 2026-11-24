@@ -23,6 +23,7 @@ import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
 import { Agent } from "./agent.js"
 import type { Permission } from "@opencode/schema/permission"
+import { PermissionPolicy } from "./permission/policy.js"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
 import path from "path"
@@ -565,7 +566,7 @@ const layer = (options?: Options) =>
             return {
               agent,
               model: yield* models.resolve(session, modelState.available, { kind: "primary", agent: agent.id }),
-              tools: yield* registry.snapshot(agent.info.permissions),
+              tools: yield* registry.snapshot(PermissionPolicy.fromRules(agent.info.permissions)),
             }
           }).pipe(instances.provide(session))
           const assistantMessageID = SessionMessage.ID.create()
