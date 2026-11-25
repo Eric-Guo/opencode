@@ -26,8 +26,8 @@ const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   yield* Effect.forkScoped(plugins.start)
 
   if (lifecycle.restoreWindows().length) ipc.installMenu()
-  // The first window's renderer now has its IPC port and is hydrating its stores over it. The crash
-  // reporter (spawns a process) and the context menu (a dependency tree) are not worth answering late.
+  // Let the renderer hydrate its stores over IPC before installing the context menu and, outside Windows,
+  // spawning the Crashpad handler.
   yield* Effect.sleep("500 millis")
   const logging = yield* DesktopLogging.Service
   yield* logging.startCrashReporter

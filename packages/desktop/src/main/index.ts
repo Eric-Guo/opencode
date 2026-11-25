@@ -33,6 +33,12 @@ const { registerRendererScheme } = await import("./windows/scheme")
 configureApplication()
 
 if (acquireApplicationLock()) {
+  // Crashpad only monitors renderers created after it starts.
+  if (process.platform === "win32") {
+    const { startCrashReporter } = await import("./native/crash-reporter")
+    startCrashReporter()
+  }
+
   captureLaunchLinks()
   registerRendererScheme()
   // Window first, then the bundle: starting the import before ready delays ready itself, because the

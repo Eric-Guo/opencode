@@ -1,7 +1,7 @@
 export * as DesktopLogging from "./logging"
 
 import log from "electron-log/main.js"
-import { app, crashReporter, netLog, shell } from "electron"
+import { app, netLog, shell } from "electron"
 import {
   Cause,
   Context,
@@ -17,9 +17,10 @@ import {
   References,
   Stream,
 } from "effect"
-import { homedir } from "node:os"
+import { homedir, release } from "node:os"
 import { VERSION } from "../constants"
 import { marks } from "../lifecycle/marks"
+import { startCrashReporter } from "./crash-reporter"
 import {
   EXPORT_ARCHIVE_TIMEOUT_MS,
   initialLoggingState,
@@ -173,12 +174,13 @@ const serviceLayer = Layer.effect(
 
     return Service.of({
       startNetwork: Effect.sync(() => dispatch({ type: "network.requested" })),
-      // Starting crashpad spawns its handler process, ~60 ms on the main thread, so the first window
-      // and its IPC port come first.
-      startCrashReporter: initCrashReporter(fs, path).pipe(
-        Effect.tap(() => Effect.sync(() => (marks.crash = Date.now()))),
-        Effect.catch((error) => Effect.logWarning("failed to start crash reporter", { error })),
-      ),
+      startCrashReporter: Effect.suspend(() => {
+        const result = startCrashReporter()
+
+        if ("error" in result) return scoped("crash", Effect.logWarning("failed to start crash reporter", result))
+
+        return scoped("crash", Effect.logInfo("crash reporter started", result))
+      }),
       // A second export while one runs (another window, a retry after the error page gave up) joins it.
       exportDebug: Effect.callback<string>((resume) => {
         const reply: ExportReply = {
@@ -249,18 +251,6 @@ function initLogging(fs: FileSystem.FileSystem, path: Path.Path) {
       log.initialize({ preload: false, spyRendererConsole: true })
       initConsoleTransport()
     })
-  })
-}
-
-function initCrashReporter(fs: FileSystem.FileSystem, path: Path.Path) {
-  return Effect.gen(function* () {
-    const dir = path.join(app.getPath("userData"), "Crashpad")
-    yield* fs.makeDirectory(dir, { recursive: true })
-    yield* Effect.sync(() => {
-      app.setPath("crashDumps", dir)
-      crashReporter.start({ uploadToServer: false, compress: true })
-    })
-    yield* scoped("crash", Effect.logInfo("crash reporter started", { path: dir }))
   })
 }
 
@@ -335,6 +325,7 @@ function manifest(path: Path.Path, netLogPath: string | undefined) {
     name: app.getName(),
     packaged: app.isPackaged,
     platform: process.platform,
+    osRelease: release(),
     arch: process.arch,
     versions: process.versions,
     uptime: process.uptime(),
