@@ -10,6 +10,7 @@ import {
 import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import { getModelCatalog } from "../lib/model-catalog-query"
 import {
   ComparisonCardsSection,
   comparisonHref,
@@ -25,7 +26,6 @@ import {
   catalogSlug,
   findModelCatalogEntry,
   formatCatalogLabName,
-  getModelCatalog,
   isKnownCatalogLab,
   isProviderlessLab,
   type ModelCatalog,

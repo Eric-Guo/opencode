@@ -7,9 +7,10 @@ import { LocaleLinks } from "../../component/locale-links"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { localizedUrl } from "../../lib/language"
+import { getModelCatalog } from "../../lib/model-catalog-query"
 import { providerIconId } from "../../lib/provider-icon"
 import { ComparisonCardsSection, comparisonHref, modelRefFromCatalog, type ComparisonPair } from "../compare-cards"
-import { formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
+import { formatCatalogLabName, type ModelCatalogEntry } from "../model-catalog"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
   applyThemePreference,
