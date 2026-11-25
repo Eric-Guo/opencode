@@ -4,7 +4,7 @@ import { createMemo, Show } from "solid-js"
 import ModelCompareDetailPage from "../../../component/model-compare-detail"
 import { NotFoundMeta } from "../../../component/not-found-meta"
 import { resolveComparisonFamily } from "../../../lib/comparison-pages"
-import { getModelCatalog } from "../../model-catalog"
+import { getModelCatalog } from "../../../lib/model-catalog-query"
 
 export default function ModelCompareFamily() {
   const params = useParams()

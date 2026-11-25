@@ -1,5 +1,4 @@
 import { STEALTH_MODELS, statModel } from "@opencode/data-core/domain/model-normalization"
-import { query } from "@solidjs/router"
 
 export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"
 export const modelCatalogPricingUrl = "https://models.opencode.ai/api.json"
@@ -84,11 +83,6 @@ async function fetchModelCatalog() {
   ])
   return buildModelCatalog(models, pricing, labs)
 }
-
-export const getModelCatalog = query(async () => {
-  "use server"
-  return loadModelCatalog()
-}, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {
   const canonicalModel = statModel(model, undefined)
