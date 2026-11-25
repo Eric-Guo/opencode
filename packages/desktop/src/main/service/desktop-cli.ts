@@ -5,7 +5,7 @@ import { promisify } from "node:util"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import installer from "../../../../../install?raw"
-import { cliInstallPath } from "../cli-install"
+import { cliInstallDirectory, cliInstallPath } from "../cli-install"
 import { DesktopPaths } from "../paths"
 import { parseCliVersion, stageName } from "./cli-version"
 import { DesktopCliState } from "./desktop-cli-state"
@@ -119,7 +119,7 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
 
   const preferred = app.isPackaged
     ? cliInstallPath(app.getPath("userData"), stage)
-    : path.join(app.getPath("userData"), "cli", stage, executableName())
+    : path.join(cliInstallDirectory(app.getPath("userData")), stage, executableName())
 
   const installed = yield* fs.exists(preferred)
 

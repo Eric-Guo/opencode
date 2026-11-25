@@ -6,6 +6,7 @@ import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import extension from "#desktop-main-extension"
+import { cliInstallDirectory } from "../cli-install"
 import { CHANNEL } from "../constants"
 import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
@@ -143,7 +144,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (
   // The service now runs the current version, so an older copy at most belongs to a process still exiting.
   if (mode === "initial" && (app.isPackaged || isolated) && cli.binary)
     runFork(
-      cleanStages(cli.binary).pipe(
+      cleanStages(cli.binary, { root: cliInstallDirectory(app.getPath("userData")) }).pipe(
         Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
       ),
     )
