@@ -1,12 +1,11 @@
-import { describe, expect, mock, test } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 import { readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { buildOgWorker } from "../script/build-og-worker"
 import { parsePath } from "../src/lib/data-path"
 import type { OgCard } from "../src/og/card"
-
-const { labOgCard, modelOgCard, ogImageAlt, ogImageUrl, ogVersion } = await import("../src/og/card-data")
+import { labOgCard, modelOgCard, ogImageAlt, ogImageUrl, ogVersion } from "../src/og/card-data"
 
 // The real in-process renderer, counted, and an in-memory stand-in for the Worker's edge cache, which local runs lack.
 // `#resource` resolves to this same module, so take the real functions before replacing it.
@@ -174,6 +173,12 @@ describe("og.png response", () => {
   const image = `${card.path}/og.png`
   const banner = Bun.file(new URL("../public/banner.png", import.meta.url))
 
+  beforeEach(() => {
+    renders.length = 0
+    failing.clear()
+    cached.clear()
+  })
+
   // The first render compiles satori's, HarfBuzz's and resvg's Wasm in-process.
   test("renders a 1200x630 PNG with a long cache for the current version", async () => {
     const response = await ogResponse({
@@ -196,21 +201,19 @@ describe("og.png response", () => {
   test("any other version gets today's card with the pages' short cache, without a new render", async () => {
     const version = ogVersion(card)
     await ogResponse({ origin, path: image, version, head: false, card: async () => card })
-    const before = renders.length
     for (const other of ["random-1", "random-2", "../x", null]) {
       const response = await ogResponse({ origin, path: image, version: other, head: true, card: async () => card })
       expect(response.headers.get("Content-Type")).toBe("image/png")
       expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, s-maxage=300, must-revalidate")
       expect(response.body).toBeNull()
     }
-    expect(renders.length).toBe(before)
+    expect(renders).toHaveLength(1)
     expect([...cached.keys()]).toEqual([`${origin}${image}?v=${version}`])
   }, 30_000)
 
   test("when a card fails to render, the banner stands in and is cached for a minute", async () => {
     const lab = labOgCard(thinkingMachines)!
     failing.add(lab.path)
-    const before = renders.length
     for (const _ of [1, 2]) {
       const response = await ogResponse({
         origin,
@@ -223,12 +226,11 @@ describe("og.png response", () => {
       expect(new Uint8Array(await response.arrayBuffer())).toEqual(await banner.bytes())
     }
     // The second request is served from the cache, not another failed render.
-    expect(renders.length).toBe(before + 1)
+    expect(renders).toHaveLength(1)
     expect(cached.has(`${origin}${lab.path}/og.png?v=${ogVersion(lab)}`)).toBe(true)
   })
 
   test("pages that don't exist or fail to load get the banner, uncached", async () => {
-    const keys = cached.size
     for (const load of [async () => undefined, () => Promise.reject(new Error("PlanetScale is down"))]) {
       const response = await ogResponse({
         origin,
@@ -242,7 +244,7 @@ describe("og.png response", () => {
       expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, s-maxage=60")
       expect(new Uint8Array(await response.arrayBuffer())).toEqual(await banner.bytes())
     }
-    expect(cached.size).toBe(keys)
+    expect(cached.size).toBe(0)
   })
 })
 
