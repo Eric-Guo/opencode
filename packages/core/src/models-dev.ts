@@ -574,6 +574,11 @@ function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][num
   }
 }
 
+// Prices are dated by the UTC day, so normalized models are only good until it changes.
+function utcDay() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 const decodeServiceTier = Schema.decodeUnknownOption(Schema.Struct({ equals: Schema.optional(Schema.String) }))
 // ISO dates (YYYY-MM-DD), which compare as strings.
 const decodeDate = Schema.decodeUnknownOption(
@@ -892,6 +897,13 @@ export const layer = (options?: Options) =>
         ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
       )
       const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
+      // The UTC day the cached models were priced for.
+      const priced = { day: utcDay() }
+      const invalidate = Effect.gen(function* () {
+        priced.day = utcDay()
+        yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
+        yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+      })
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock
@@ -913,14 +925,15 @@ export const layer = (options?: Options) =>
               if (!response) return
               yield* decodeCatalog(response.text)
               yield* writeCache(response.text, response.etag, digest)
-              yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
-              yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+              yield* invalidate
             }),
           )
           .pipe(
             Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
             Effect.ignore,
           )
+        // An unchanged or unreachable catalog can still hold a price that started or ended today.
+        if (priced.day !== utcDay()) yield* invalidate
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
