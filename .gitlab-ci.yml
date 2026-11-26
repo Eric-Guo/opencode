@@ -4,6 +4,8 @@ variables:
   # Keep this version aligned with the @playwright/test catalog entry in package.json.
   PLAYWRIGHT_VERSION: "1.65.1"
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  # Shanghai Jiao Tong University mirror for the Shanghai runner.
+  UBUNTU_APT_MIRROR: "https://mirror.sjtu.edu.cn"
   BUN_INSTALL_CACHE_DIR: "$CI_PROJECT_DIR/.cache/bun"
   HUSKY: "0"
   GITHUB_ACTIONS: "false"
@@ -54,11 +56,17 @@ default:
     - rm -rf packages/nexus-ui
     - git clone --depth 1 --branch nexus_backend "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-agent-7777.git" packages/nexus-ui
 
+.apt-update:
+  before_script:
+    # Keep /ubuntu/ on amd64 and /ubuntu-ports/ on arm64.
+    - 'sed -Ei "s|^URIs: https?://([[:alnum:].-]+\.)?ubuntu\.com/|URIs: ${UBUNTU_APT_MIRROR%/}/|" /etc/apt/sources.list.d/ubuntu.sources'
+    - apt-get update -qq
+
 .ci:
   # Allow dependency installation and job scripts to share a one-hour budget.
   timeout: 3600 seconds
   before_script:
-    - apt-get update -qq
+    - !reference [.apt-update, before_script]
     - apt-get install -y --no-install-recommends build-essential python3-setuptools ripgrep unzip
     - !reference [default, before_script]
     - bun install --frozen-lockfile
@@ -91,6 +99,12 @@ check:
 unit:
   extends: .ci
   stage: test
+  before_script:
+    # Unit tests use prebuilt native dependencies and need rg on PATH.
+    - !reference [.apt-update, before_script]
+    - apt-get install -y --no-install-recommends ripgrep
+    - !reference [default, before_script]
+    - bun install --frozen-lockfile
   script:
     # Permission-denial tests need an ordinary user; the Playwright image starts as root.
     - chown -R pwuser:pwuser "$CI_PROJECT_DIR"
@@ -169,7 +183,7 @@ build:
     - !reference [default, before_script]
     # NSIS uses a 32-bit bootstrapper even for x64 installers, so Wine needs its i386 runtime.
     - dpkg --add-architecture i386
-    - apt-get update -qq
+    - !reference [.apt-update, before_script]
     - apt-get install -y --no-install-recommends build-essential python3-setuptools ripgrep unzip libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64 zlib1g:amd64 wine:amd64 wine32:i386 wine64:amd64
     # Replace any submodule checkouts with the branches required by the desktop extension.
     - rm -rf packages/desktop/resources/thape-config packages/7777 packages/plm-meeting packages/desktop-tab
