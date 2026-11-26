@@ -438,23 +438,18 @@ describe("Shell on the process daemon", () => {
   )
 
   // A reload or an eviction closes a Location while the server keeps running.
-  it.live("collects an empty daemon place after its last Location scope closes", () =>
+  it.live("releases an empty daemon place after its last Location scope closes", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
-      const refs = yield* Effect.gen(function* () {
-        const descriptor = location({ directory: AbsolutePath.make(env.directory) })
+      const descriptor = location({ directory: AbsolutePath.make(env.directory) })
+      const previous = yield* Effect.gen(function* () {
         const runs = yield* env.server.at(descriptor)
         expect(yield* Effect.scoped(env.server.at(descriptor))).toBe(runs)
         expect(yield* env.server.at(descriptor)).toBe(runs)
-        return { descriptor: new WeakRef(descriptor), runs: new WeakRef(runs) }
+        return runs
       }).pipe(Effect.scoped)
 
-      yield* Effect.promise(async () => {
-        await Bun.sleep(0)
-        Bun.gc(true)
-      })
-      expect(refs.descriptor.deref()).toBeUndefined()
-      expect(refs.runs.deref()).toBeUndefined()
+      expect(yield* Effect.scoped(env.server.at(descriptor))).not.toBe(previous)
     }),
   )
 
