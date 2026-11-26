@@ -21,7 +21,7 @@ export async function rendererFixture(url: string, storage?: StateStore, main?: 
   // Built-ins always run. SSH publishes an empty inventory so the server startup gate can settle.
   const plugins = ["ssh", "updater"].map((id) => ({ id, builtin: true, enabled: true }))
   const rpcs = AppRpcs.merge(WindowRpcs, StorageRpcs, EventRpcs, PluginRpcs)
-  const settings = { spellcheck: true }
+  const settings = { spellcheck: true, smoothScrolling: false }
 
   const handlers = Layer.mergeAll(
     AppRpcs.toLayer({
@@ -41,6 +41,11 @@ export async function rendererFixture(url: string, storage?: StateStore, main?: 
       AppSetSpellcheckEnabled: ({ enabled }) =>
         Effect.sync(() => {
           settings.spellcheck = enabled
+        }),
+      AppGetSmoothScrollingEnabled: () => Effect.sync(() => settings.smoothScrolling),
+      AppSetSmoothScrollingEnabled: ({ enabled }) =>
+        Effect.sync(() => {
+          settings.smoothScrolling = enabled
         }),
       AppRecordFatalRendererError: ({ error }) => Effect.die(error),
       AppSetNativeTranslations: () => Effect.void,
