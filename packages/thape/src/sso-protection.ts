@@ -16,6 +16,7 @@ export const Plugin = define({
       if (process.env.OPENCODE_API_KEY?.trim()) return
 
       models.remove("vipai", "gpt-6-astra")
+      models.remove("vipai", "gpt-6.2-astra")
       models.remove("vipai", "gpt-6.1-sol")
       models.remove("vipai", "gpt-6.2-sol")
     })
