@@ -19,6 +19,20 @@ const options = {
   fs: { filewatcher: false },
 } as const
 
+it.live("initializes a new location before its first location-scoped request", () =>
+  Effect.gen(function* () {
+    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-new-location-")))
+    const directory = path.join(config.path, "project")
+    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+    const url = new URL("http://opencode.local/api/command")
+    url.searchParams.set("location[directory]", directory)
+
+    const response = yield* Effect.promise(() => handler(new Request(url)))
+    expect(response.status).toBe(200)
+    expect((yield* Effect.promise(() => fs.stat(directory))).isDirectory()).toBe(true)
+  }),
+)
+
 it.live("returns LocationNotFoundError for a missing folder and recovers once it exists", () =>
   Effect.gen(function* () {
     const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-errors-")))
