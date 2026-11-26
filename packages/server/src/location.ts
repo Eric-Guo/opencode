@@ -3,6 +3,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { FSUtil } from "@opencode/util/fs-util"
 import { LocationNotFoundError, InvalidRequestError } from "@opencode/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
@@ -76,10 +77,22 @@ export const layer = Layer.effect(
   LocationMiddleware,
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
+    const fs = yield* FSUtil.Service
+    const sessions = yield* Session.Service
+    const initialize = Effect.fnUntraced(function* (ref: Location.Ref) {
+      if (yield* fs.existsSafe(ref.directory)) return
+      // Draft-first clients request catalogs before creating a Session. Preserve 404s for paths
+      // that already have a recorded Session, including locations deleted after their first use.
+      const recorded = yield* sessions.list({ directory: ref.directory, limit: 1 }).pipe(Effect.orDie)
+      if (recorded.data.length > 0) return
+      yield* fs.ensureDir(ref.directory).pipe(Effect.orDie)
+    })
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), locationErrors)
+        const ref = LocationServiceMap.canonical(requestRef(request))
+        yield* initialize(ref)
+        return yield* effect.pipe(Effect.provide(locations.get(ref)), locationErrors)
       }),
     )
   }),
