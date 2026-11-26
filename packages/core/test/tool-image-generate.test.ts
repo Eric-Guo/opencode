@@ -519,11 +519,12 @@ describe("image generation migration", () => {
       fixture.result = { images: [{ type: "image", data: Buffer.from(bytes).toString("base64"), mime: "image/png" }] }
 
       const result = yield* run({ prompt: "weather card", aspect: "3:4", resolution: "2K" })
+      const saved = `${result.metadata?.path}.png`
       const completed = yield* notice(result)
-      expect(completed).toContain(`Actual pixel dimensions: ${result.output.path}.png: 1086x1448.`)
+      expect(completed).toContain(`Actual pixel dimensions: ${saved}: 1086x1448.`)
       expect(completed).toContain('Submitted settings: {"n":1,"aspect":"3:4","resolution":"2K"}')
       expect(completed).toContain("submitted settings do not prove the requested resolution was achieved")
-      expect(yield* Effect.promise(() => Bun.file(`${result.output.path}.png`).bytes())).toEqual(bytes)
+      expect(yield* Effect.promise(() => Bun.file(saved).bytes())).toEqual(bytes)
       expect(fixture.requests).toHaveLength(1)
     }),
   )
