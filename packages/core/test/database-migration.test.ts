@@ -1063,6 +1063,7 @@ function previousV2Database(db: EffectDrizzleSqlite.EffectSQLiteDatabase) {
       db.run(sql`ALTER TABLE project DROP COLUMN ${sql.identifier(column)}`),
     )
     yield* db.run(sql`DROP TABLE session_inbox`)
+    yield* db.run(sql`DROP TABLE space`)
     yield* db.run(sql`DROP TABLE machine`)
     yield* db.run(sql`DROP TABLE worktree`)
     yield* db.run(sql`DROP TABLE blob_ref`)

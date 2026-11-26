@@ -21429,6 +21429,17 @@
                           }
                         ]
                       },
+                      "wake": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["auto", "passive"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "workspace": {
                         "anyOf": [
                           {
@@ -21527,6 +21538,199 @@
                       }
                     },
                     "required": ["action", "conversation", "key", "prompt", "rule"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["routine.create"]
+                      },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reasoning_effort": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reasoning_enabled": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "fallback_models": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "tool_names": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "conversation": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "approval": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "rules", "bypass"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "key": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "what": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "does": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["act", "check_in"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "rule": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["once"]
+                              },
+                              "run_at": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "run_at"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["interval"]
+                              },
+                              "starts_at": {
+                                "type": "string"
+                              },
+                              "every_seconds": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["kind", "starts_at", "every_seconds"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["daily"]
+                              },
+                              "local_time": {
+                                "type": "string"
+                              },
+                              "time_zone": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "local_time", "time_zone"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "what", "rule"],
                     "additionalProperties": false
                   },
                   {
@@ -21661,6 +21865,17 @@
                               "type": "string",
                               "minLength": 1
                             }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "wake": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["auto", "passive"]
                           },
                           {
                             "type": "null"
