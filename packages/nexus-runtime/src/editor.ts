@@ -27,6 +27,7 @@ import type { Nexus } from "@opencode/schema/nexus"
 import { editorBridge, editorRoots, localEditorRoots } from "./editor-bridge"
 import { EditorTranscript, editorCall } from "./editor-follow"
 import { readEditorHistory } from "./editor-replay"
+import { memoryContext } from "./speakers"
 
 type Mode = "bypass" | "ask" | "rules"
 type EditorPort = ReturnType<Awaited<ReturnType<typeof editorBridge>>["attach"]>
@@ -634,6 +635,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
               answering_user_public_id: nexus.identity!.agent,
               default_runner_executor_public_id: nexus.identity!.runner,
               metadata: { "opencode.surface": "acp", "opencode.acp.cwd": roots[0] },
+              memory_context: memoryContext(),
             },
             { signal, idempotencyKey: crypto.randomUUID() },
           )

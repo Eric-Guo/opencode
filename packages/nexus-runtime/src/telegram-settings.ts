@@ -1,6 +1,9 @@
 import { Schema } from "effect"
 
 const ID = Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/))
+const AgentKey = Schema.String.check(
+  Schema.isPattern(/^(personal|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/),
+)
 const Connection = Schema.Struct({
   name: Schema.optional(Schema.NonEmptyString.check(Schema.isMaxLength(100))),
   enabled: Schema.optional(Schema.Boolean),
@@ -25,7 +28,7 @@ const Binding = Schema.Struct({
 })
 const Settings = Schema.Struct({
   connections: Schema.optional(Schema.Record(ID, Connection)),
-  bots: Schema.optional(Schema.Record(ID, Binding)),
+  bots: Schema.optional(Schema.Record(AgentKey, Binding)),
 })
 
 export class TelegramSettings {

@@ -51,7 +51,7 @@ export type BuiltinPolicy = {
   checkpoints?: Checkpoints
 }
 
-type OwnedTask = { cancel: AbortController; started: boolean; work?: Promise<void> }
+type OwnedTask = { cancel: AbortController; started: boolean; work?: Promise<void>; wake?: () => void }
 
 /** Both entrances claim the authoritative row; realtime carries no executable arguments. */
 export class RunnerInbox {
@@ -128,6 +128,10 @@ export class RunnerInbox {
         this.counts.canceled++
         owned.cancel.abort(new ClaimInterrupted("The tool was interrupted by Nexus cancellation."))
       }
+      return
+    }
+    if (event.type === "operation_ready") {
+      this.running.get(JSON.stringify([event.run_public_id, event.task_key]))?.wake?.()
       return
     }
     if (event.type !== "work_available" || event.kind !== "tool_call") return
@@ -436,6 +440,7 @@ export class RunnerInbox {
     if (signal.aborted) return interrupted(signal.reason)
     const task = this.options.executor.inboxTask(claim.task.run_public_id, claim.task.task_key)
     const orchestration = claimOrchestration(task, claim.claim_token, signal)
+    owned.wake = orchestration.wake
     const ask = async (key: string, prompt: string, options?: string[]) => {
       const result = await orchestration.ask(key, prompt, options)
       if (

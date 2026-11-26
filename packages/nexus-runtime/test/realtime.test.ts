@@ -29,6 +29,7 @@ test("terminal permission expires from request start and cannot revive a replace
     offer_sdp: null,
     answer_sdp: null,
     max_age_ms: 1000,
+    ice_servers: null,
   }
   lease.begin("first")
   lease.accept("first", snapshot, performance.now() - 2000)

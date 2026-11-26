@@ -14,6 +14,7 @@ export class HumanLogin {
   private cancel?: AbortController
   private devicePending?: Promise<void>
   private deviceState?: { url: string; code: string; error?: string }
+  private readonly verifications = new Map<string, Promise<{ id: string; role: string }>>()
 
   constructor(private readonly directory: string) {}
 
@@ -177,15 +178,28 @@ export class HumanLogin {
     return credentials
   }
 
+  // Concurrent verifications carrying the same bearer share one in-flight
+  // profile read; nothing is cached, so a later request observes revocation.
   async account(origin: string) {
     const credentials = await this.credentials(origin)
     if (!credentials) return null
-    const profile = await new PlatformClient({
+    const bearer = await credentials.provider("platform")()
+    const pending = this.verifications.get(bearer)
+    if (pending) return pending
+    const verification = new PlatformClient({
       baseURL: origin,
       credentialProvider: credentials.provider("platform"),
-    }).profile.fetch()
-    if (profile.member.kind !== "human") throw new Error("Expected a Human Nexus account.")
-    return { id: profile.member.public_id, role: profile.member.role }
+    })
+      .profile.fetch()
+      .then((profile) => {
+        if (profile.member.kind !== "human") throw new Error("Expected a Human Nexus account.")
+        return { id: profile.member.public_id, role: profile.member.role }
+      })
+      .finally(() => {
+        this.verifications.delete(bearer)
+      })
+    this.verifications.set(bearer, verification)
+    return verification
   }
 
   async memberCredential(origin: string) {

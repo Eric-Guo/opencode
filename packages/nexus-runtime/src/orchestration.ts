@@ -17,10 +17,13 @@ export function claimOrchestration(
   task: ReturnType<ExecutorClient["inboxTask"]>,
   token: string,
   signal: AbortSignal,
-): Orchestration {
+): Orchestration & { wake(): void } {
   const operations = new ClaimOperations(task, token, signal)
   const pending = new Map<string, Promise<JsonValue>>()
   return {
+    wake() {
+      operations.wake()
+    },
     async start(key, request) {
       const accepted = await operations.submit(key, request)
       pending.set(key, accepted.outcome)

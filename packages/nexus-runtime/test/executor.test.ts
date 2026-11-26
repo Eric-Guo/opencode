@@ -1114,3 +1114,93 @@ test("unresolved journal recovery remains visible until its saved claim is recon
     await fixture.close()
   }
 })
+
+test("an operation_ready hint wakes the matching in-flight task's observation wait", async () => {
+  const fixture = await executorFixture()
+  const reads: number[] = []
+  const state = { answered: false }
+  fixture.control.route = async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/operations") && request.method === "GET")
+      return Response.json({
+        operations: {
+          context: { tools: [], model_defaults: {}, environment: null },
+          trace: [],
+          position: 0,
+          next_after: null,
+        },
+      })
+    if (path.endsWith("/operations") && request.method === "POST") {
+      const body = (await request.json()) as { operation: { key: string; request: JsonObject } }
+      return Response.json({
+        operation: {
+          type: "operation",
+          key: body.operation.key,
+          position: 1,
+          request: body.operation.request,
+          receipt: {},
+          refusal: null,
+          outcome: null,
+        },
+      })
+    }
+    if (path.endsWith("/observation")) {
+      reads.push(Date.now())
+      if (!state.answered) return Response.json({ observation: null, position: 1 })
+      return Response.json({
+        observation: {
+          type: "observation",
+          key: "question",
+          position: 2,
+          request: null,
+          receipt: null,
+          refusal: null,
+          outcome: { status: "completed", content: [{ type: "text", text: "yes" }] },
+        },
+        position: 2,
+      })
+    }
+    return undefined
+  }
+  const runner = inbox(fixture, [
+    {
+      definition: definition("probe", "Fixture", {}, []),
+      async execute(_input, context) {
+        const outcome = await context.orchestration!.ask("question", "Continue?")
+        return { content: "done", structured_content: outcome }
+      },
+    },
+  ])
+  fixture.add("run", "task", "probe")
+  try {
+    runner.notify(nudge("run", "task", "probe"))
+    // The third observation leaves a one-second wait pending.
+    await until(() => reads.length >= 3)
+    // A hint for another task is a no-op.
+    runner.notify({ event: { type: "operation_ready", run_public_id: "run", task_key: "other" } })
+    // The settle lets the client park in its wait: a hint landing during a read is spent by design.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const wokeAt = Date.now()
+    state.answered = true
+    runner.notify({ event: { type: "operation_ready", run_public_id: "run", task_key: "task" } })
+    await until(() => reads.length >= 4)
+    expect(reads[3] - wokeAt).toBeLessThan(800)
+    await runner.drain()
+    expect(fixture.commits).toHaveLength(1)
+    expect(fixture.commits[0].body.structured_content).toEqual({
+      status: "completed",
+      content: [{ type: "text", text: "yes" }],
+    })
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+}, 15000)
+
+async function until(condition: () => boolean, timeout = 5000) {
+  const start = Date.now()
+  while (!condition()) {
+    if (Date.now() - start > timeout) throw new Error("Timed out waiting for condition.")
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}

@@ -5914,11 +5914,31 @@ export type ExperimentalNexusManageInput = {
         readonly reasoning_enabled?: boolean | null
         readonly fallback_models?: ReadonlyArray<string> | null
         readonly tool_names?: ReadonlyArray<string> | null
+        readonly wake?: "auto" | "passive" | null
         readonly workspace?: string | null
         readonly approval?: "ask" | "rules" | "bypass" | null
         readonly conversation: string
         readonly key: string
         readonly prompt: string
+        readonly name?: string | null
+        readonly rule:
+          | { readonly kind: "once"; readonly run_at: string }
+          | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
+          | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+      }
+    | {
+        readonly action: "routine.create"
+        readonly model?: string | null
+        readonly reasoning_effort?: string | null
+        readonly reasoning_enabled?: boolean | null
+        readonly fallback_models?: ReadonlyArray<string> | null
+        readonly tool_names?: ReadonlyArray<string> | null
+        readonly workspace?: string | null
+        readonly conversation?: string | null
+        readonly approval?: "ask" | "rules" | "bypass" | null
+        readonly key?: string | null
+        readonly what: string
+        readonly does?: "act" | "check_in" | null
         readonly name?: string | null
         readonly rule:
           | { readonly kind: "once"; readonly run_at: string }
@@ -5945,6 +5965,7 @@ export type ExperimentalNexusManageInput = {
         readonly reasoning_enabled?: boolean | null
         readonly fallback_models?: ReadonlyArray<string> | null
         readonly tool_names?: ReadonlyArray<string> | null
+        readonly wake?: "auto" | "passive" | null
         readonly workspace?: string | null
         readonly conversation: string
         readonly id: string

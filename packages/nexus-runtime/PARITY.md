@@ -1,22 +1,98 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`0d98aa07776db6d38ca5d8bcaf4e10f80c39ed04`. Paths in the first column are relative
+`e2033ac9a1ae12063d86a0c1565dbfd9adc12d72`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
-The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` includes
-ACP PDF ingress, delegated ACP PDF forwarding, claim-scoped attachment reads
-and model adaptation updates.
-Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
-to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
-
-The eleven executable non-WebUI packages have TypeScript owners and contract
-tests in the [reference contract anchors](#reference-contract-anchors). The latest review covers
-[project Presets and development environment commands](#project-presets-and-development-environment-commands).
+The reference went through the lean-kernel refactor and the Personal Superagent
+reshape since `0d98aa07776db6d38ca5d8bcaf4e10f80c39ed04`: `rho-t3` was removed,
+and `rho` gained Channels, Inbox, Routines, Skill drafts and the Superagent Ops
+routes. The ten executable non-WebUI packages have TypeScript owners and contract
+tests in the [reference contract anchors](#reference-contract-anchors). The latest
+review covers the [Personal Superagent alignment](#personal-superagent-alignment).
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Personal Superagent alignment
+
+Reviewed November 26, 2026 against Cybros `e2033ac9a` from OpenCode `a82bc392ff8`.
+The vendored `@cybros/agent` SDK was rebuilt from `sdks/typescript` at the same
+revision (`vendor/cybros-agent-0.1.0-superagent.tgz`), picking up triggers,
+thread subscriptions, the outbox with lease-claim and settlement, platform user
+cost limits, `remaining_ms`, `ice_servers`, `include_tool_outputs`,
+`MemorySelection.mode` and the `tool_name` run filter, and dropping the retired
+budget-ledger resources.
+
+| Rho workflow | TypeScript owner | Verified behavior |
+| --- | --- | --- |
+| `rho` Channels (`channels.rb`) | `src/channels.ts` | Gate outcomes (explicit/observe/auto/filtered), attention policy with quiet hours and daily cap, event rules, outbox enqueue/drain with adapter verdicts, Personal Desk ensure, 8-attempt CAS retry |
+| `rho` Inbox (`inbox.rb`) | `src/inbox.ts` | Partition into needs_you/running/snoozed/done with the reference classification order, snooze validation and wake-on-activity, mark-read, complete (marked_read/returned_to_running/archived) |
+| `rho` Routines (`routines.rb`) | `src/routines.ts` | Unified time+event list, `act`/`check_in` mapping to `auto`/`passive` wake, check-in prompt prefix |
+| `rho` Skill drafts (`skill_drafts.rb`) | `src/skill-drafts.ts` | Propose upsert by (scope, name), limits, approve-into-memory with CAS, dismiss |
+| `rho` Superagent Ops routes (`extensions/ops/superagent_routes.rb`, `skill_routes.rb`) | `src/operations.ts`, `src/runtime.ts` (`routine.create`) | `personal_desk`, `inbox.*`, `channels.*`, `subscriptions.*`, `triggers.handback`, `routines.*`, `skills.drafts.*` operations through `application.operation`; time-routine creation through the shared schedule path with desk default, prompt prefix and wake mapping |
+| `rho` agent tools (`channel_dispatch`, `propose_skill`) | `src/superagent-tools.ts`, `src/builtins.ts` (`nexus.superagent`) | Agent-served, environment-independent tools in every run declaration; dispatch actions reach the operations layer; failures return tool errors |
+| `rho-ingress-telegram` outbox pump | `src/telegram-ingress.ts` | `telegram` adapter registration on activation, 2-second drain pump across workspaces, delivery verdict mapping (sent/dropped channel_gone/failed/uncertain unsettled), `personal` bot key |
+| `rho` memory index mode (`speakers.rb`) | `src/speakers.ts`, create paths in `application.ts`, `bots.ts`, `telegram.ts`, `editor.ts` | Every runtime-created conversation binds `memory_context` with `mode: "index"`; explicit full omits the key; speaker binding pinned |
+| `rho` personal Bot (`host_followers/bots.rb`) | `src/bots.ts`, `src/telegram-settings.ts`, `src/operations.ts` | Synthetic `personal` target without a profile agent row, owner audience, first-workspace home fallback, desk surface metadata, bot gate skipped, rewind guard refuses only non-personal Bots |
+| `rho` memory review cadence (`memory_review.rb`) | `src/memory-review.ts`, `src/memory-review-extension.ts` | `every_turns` default 1 clamped 1–50; a review forks only when `position - after >= every_turns` |
+| `rho` preset seeds and prompts (`agent_presets.rb`, `execution_policy.rb`, `run_declaration.rb`, `memory_policy.rb`) | `src/presets.ts`, `src/execution-policy.ts`, `src/memory-policy.ts` | Seeds renamed Personal/Peer with generalized role prompts; attention doctrine, handback guidance and index-mode memory taxonomy in the declaration text |
+| `rho` OAuth coalescing (`oauth_login.rb`) | `src/login.ts` | Concurrent verifications of one bearer share a single in-flight profile read; nothing is cached, so revocation is observed on the next request |
+| `rho-env` transport hardening (`claim_orchestration.rb`, `deadline_extension.rb`, `task_run.rb`, `claim_realtime.rb`, `webrtc_connection.rb`) | `src/claim-control.ts`, `src/claims.ts`, `src/claim-progress.ts`, `src/runner-inbox.ts`, `src/terminal.ts` | `remaining_ms` anchoring, `operation_ready` wake, observe backoff 250ms→2s, transient control-error retries with clamp semantics, extended park windows, ICE-server inheritance from the realtime projection with relay fallback |
+| `rho` terminals/history/schedules wire (`ops/terminals.rb`, `ops/conversation_history.rb`, `ops/schedules.rb`) | `src/terminal-runs.ts`, `src/operations.ts`, `src/jobs.ts`, `src/runtime.ts` | Server-side `tool_name: "terminal"` filter, `include_tool_outputs` forwarding, schedule `wake` authoring with `local_time`/`time_zone`/`starts_at` rule names |
+
+`rho-t3` was removed from the reference; its TypeScript owners (`src/t3*.ts`),
+the `nexus.t3` extension, the Nexus UI T3 panel and their tests were removed with
+it. The Nexus UI gained the Inbox, Routines, Channels and Knowledge panels, a
+Personal Desk action and the memory injection-mode select; its bridge proxies the
+new operations with the established workspace and conversation guards. The UI
+ledger records the surface behavior.
+
+Runtime conformance passed 499 of 501 tests across 86 files with Chromium, PTY
+and WebRTC; the one failure is the pre-existing `sides.test.ts` fork-order race
+(two concurrent `openSide` calls), which fails intermittently on the base
+revision as well and is unrelated to this review. The Nexus UI passed 452 unit
+tests and 126 Chromium component tests, and both packages' type checks and
+builds passed, along with the Protocol, Client and CLI type checks, the
+regenerated client and root `bun run check` (42/42). New regression suites cover
+the four modules (`channels`, `inbox`, `routines`, `skill-drafts`), the
+operations surface (`superagent`), the Telegram pump (`telegram-outbox`), the
+claim hardening (`claim-control`, `claims`, `claim-progress`, `executor`), the
+terminal ICE inheritance (`terminal`), the memory cadence (`memory-review`), the
+speakers default (`speakers`), the personal Bot (`bots`, `telegram`,
+`operations`) and the OAuth coalescing (`login`).
+
+Intentional substitutions recorded this review: the desk surface metadata key is
+`opencode.surface` (the runtime's established metadata namespace) where Ruby
+writes `rho.surface`; draft and rule public IDs use `crypto.randomUUID()` rather
+than UUIDv7; quiet hours honor the configured `time_zone` where the reference
+formats in UTC; and the Telegram pump drains enabled connections only.
+
+### Live verification on localhost
+
+On November 27, 2026 the production modules ran against the development Nexus at
+`http://localhost:3000` through a scratch Agent member credential and a private
+scratch workspace, driving `Channels`, `Inbox`, `Routines` and `SkillDrafts`
+directly over the re-vendored SDK. 21 checks passed:
+
+- The Personal Desk was created with `memory_context.mode == "index"` and
+  `opencode.surface: "personal_desk"` metadata, and a second ensure reused it.
+- The channel Gate recorded an `observed` outcome with a matching event rule and
+  created the trigger without a router; after switching the source to `auto`,
+  ingest routed to the desk with `strength: "inferred"` (Nexus outcome `stored`).
+- Quiet hours suppressed a proactive `result` (`suppressed_reason:
+  "quiet_hours"`) while a plain `answer` queued; the outbox drain settled `sent`
+  and left an `uncertain` message unsettled.
+- The Inbox listed the desk, snoozed it `indefinite`, and `complete` returned
+  `marked_read`. Routines listed the event rule and the saved attention policy.
+- Skill drafts proposed, listed and removed. A daily schedule was created with
+  `wake: "passive"` through the real schedules endpoint.
+
+The scratch workspaces, conversations, memory collections, store entries,
+speakers and the Agent were deleted and the member credential revoked; the
+elected service was not restarted and kept its original pairing. The installed
+managed service predates these source changes and needs a rebuild to ship them.
 
 ## Project Presets and development environment commands
 
@@ -574,28 +650,27 @@ The scratch Bots and MCP connections were removed, the workspace reached
 | `rho-mcp`: settings, curation, documents, transports, OAuth and conversation mounts                                     | `mcp.ts`, `mcp-settings.ts`, `mcp-curation.ts`, `mcp-exchange.ts`, `mcp-session.ts`, `mcp-sessions.ts`         | `mcp.test.ts`, `mcp-exchange.test.ts`, `mcp-session.test.ts`, `mcp-sessions.test.ts`, `captured-mcp.test.ts`: exact names/budgets, isolated bad rows, media/results, narrow client capabilities, transport cancellation, session replacement and captured attachment anchors; post-login catalog publication without restarting unchanged servers; OAuth credential completion and refresh also use the Core `integration.test.ts` and `integration-refresh.test.ts` suites |
 | `rho-acp`: authentication, sessions, config, slash commands, history, held questions and editor facilities              | `editor.ts`, `editor-auth.ts`, `editor-bridge.ts`, `editor-replay.ts`, CLI adapter                             | `editor.test.ts`, `editor-replay.test.ts`, `editor-permissions.test.ts`, `editor-auth.test.ts`, `runtime.test.ts`, CLI `nexus.test.ts`: authored Human admission, launch defaults, skill commands, runner-scoped roots, paginated role-aware replay, Side context, owned held-work recovery, shared grants, permission cancellation, unsaved buffers and detachment without canceling work                                                                                          |
 | `rho-acp-client`: resident delegation, permission floor, captures and process lifecycle                                 | `acp.ts`, `acp-child.ts`, `acp-policy.ts`, `acp-capture.ts`                                                    | `acp.test.ts`, `adapters.test.ts`, `runner-policy.test.ts`: real child sessions, auth/model selection, protected commands/paths, redaction, permission tracking, cancellation quarantine, deadline termination and host-ended release                                                                                                                                                                                                                                       |
-| `rho-ingress-telegram`: Connections/Bots, routing/access, durable ingress/delivery, media, schedules and worker results | `telegram.ts`, `telegram-ingress.ts`, `telegram-transport.ts`, `telegram-workers.ts`, related Telegram modules | `telegram.test.ts`, `telegram-workers.test.ts`, `telegram-cross-bot.test.ts`, `telegram-render.test.ts`, `telegram-transport.test.ts`: requester isolation, debounce, frozen admissions, fixed reply destination, uncertain-send handling, media/voice, schedules, participation and exact canonical worker ownership                                                                                                                                                       |
-| `rho-t3`: native setup, authenticated RPC, catalogs and assignment ownership                                            | `t3.ts`, `t3-native.ts`, `t3-catalog.ts`, `t3-transport.ts`                                                    | `t3.test.ts`: protocol/auth checks, native settings preservation, no automatic mutation replay, persistent handles, uncertain-launch reconciliation, fork isolation, model substitution refusal and one-shot callbacks                                                                                                                                                                                                                                                      |
+| `rho-ingress-telegram`: Connections/Bots, routing/access, durable ingress/delivery, media, schedules, worker results and the outbox pump | `telegram.ts`, `telegram-ingress.ts`, `telegram-transport.ts`, `telegram-workers.ts`, related Telegram modules | `telegram.test.ts`, `telegram-workers.test.ts`, `telegram-cross-bot.test.ts`, `telegram-render.test.ts`, `telegram-transport.test.ts`, `telegram-outbox.test.ts`: requester isolation, debounce, frozen admissions, fixed reply destination, uncertain-send handling, media/voice, schedules, participation, exact canonical worker ownership and outbox delivery verdicts |
+| `rho`: Channels, Inbox, Routines, Skill drafts and the Superagent Ops routes | `channels.ts`, `inbox.ts`, `routines.ts`, `skill-drafts.ts`, `superagent-tools.ts`, `operations.ts`, `runtime.ts` | `channels.test.ts`, `inbox.test.ts`, `routines.test.ts`, `skill-drafts.test.ts`, `superagent.test.ts`: gate outcomes, attention budgets, outbox drain, desk ensure, partition classification, snooze/complete, routine projections, draft catalog, operations dispatch and agent-tool announcements |
 | `rho-dev`: opt-in conversation controls, streams and terminal rendering                                                 | `dev/extension.ts`, `dev/streams.ts`, `dev/terminal.ts`, `operations.ts`                                       | `dev.test.ts`, `dev-worker.test.ts`, `operations.test.ts`: shared application operations, stream cursors, fallback chains, ownership, cancellation/detachment and worker-bound SDK streams                                                                                                                                                                                                                                                                                  |
 
 ## Reference contract anchors
 
-All eleven executable non-WebUI packages have production TypeScript owners above.
+All ten executable non-WebUI packages have production TypeScript owners above.
 These reference tests identify the behavioral contracts; the corresponding local
 suites exercise the OpenCode implementation rather than executing Ruby.
 
 | Package                | Reference anchors beneath its `test/` directory                                                                                                                      | Local evidence beneath `test/`                                                                |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `rho`                  | `api_key_connection_test.rb`, `host_follower_test.rb`, `execution_policy_test.rb`, `package_activation_test.rb`, `memory_review_test.rb`, `until_test.rb`            | `runtime`, `application`, `lifecycle`, `packages`, `memory-review`, `until`                   |
-| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb` | `executor`, `claims`, `runner`, `mutation`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
+| `rho`                  | `api_key_connection_test.rb`, `host_follower_test.rb`, `execution_policy_test.rb`, `package_activation_test.rb`, `memory_review_test.rb`, `until_test.rb`, `channels_routines_inbox_test.rb`, `skill_drafts_test.rb` | `runtime`, `application`, `lifecycle`, `packages`, `memory-review`, `until`, `channels`, `inbox`, `routines`, `skill-drafts`, `superagent`, `speakers` |
+| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb`, `deadline_extension_test.rb` | `executor`, `claims`, `claim-control`, `claim-progress`, `runner`, `mutation`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
 | `rho-codemode`         | `code_test.rb`, `runtime_test.rb`, `claim_bridge_test.rb`                                                                                                            | `code`, `executor`                                                                            |
 | `rho-web-tools`        | `client_test.rb`, `render_test.rb`, `commands_test.rb`                                                                                                               | `web`, `policy`, `dev`                                                                        |
 | `rho-browser`          | `tools_test.rb`, `session_test.rb`, `session_idle_test.rb`, `session_popups_test.rb`                                                                                 | `browser` with real Chromium                                                                  |
 | `rho-mcp`              | `curation_test.rb`, `documents_test.rb`, `post_login_refresh_test.rb`, `conversations_test.rb`                                                                       | `mcp`, `mcp-session`, `mcp-sessions`, `mcp-exchange`, `captured-mcp`                          |
 | `rho-acp`              | `acp/reference_replay_test.rb`, `acp/recovery_attach_test.rb`, `acp/permissions_test.rb`, `acp/materialization_test.rb`                                              | `editor-replay`, `editor-permissions`, `editor`, `application`, `runtime`                     |
 | `rho-acp-client`       | `tool_test.rb`, `children_test.rb`, `policy_test.rb`, `cancel_reuse_test.rb`, `child_retirement_test.rb`                                                            | `acp`, `attachments`, `adapters`, `runner-policy`                                             |
-| `rho-ingress-telegram` | `routing_test.rb`, `input_batch_test.rb`, `recovery_test.rb`, `delivery_test.rb`, `worker_result_delivery_test.rb`                                                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport` |
-| `rho-t3`               | `catalog_test.rb`, `setup_test.rb`, `work_test.rb`, `stop_test.rb`, `session_test.rb`                                                                                | `t3`                                                                                          |
+| `rho-ingress-telegram` | `routing_test.rb`, `input_batch_test.rb`, `recovery_test.rb`, `delivery_test.rb`, `worker_result_delivery_test.rb`, `personal_reach_outbox_test.rb`                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport`, `telegram-outbox` |
 | `rho-dev`              | `dev_commands/inspection_test.rb`, `dev_commands/execution_test.rb`, `dev_commands/stream_test.rb`, `dev_commands/conversations_test.rb`                             | `dev`, `dev-worker`, `operations`                                                             |
 
 Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
@@ -643,12 +718,23 @@ Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
 - Approval defaults remain Ask. Optional integration defaults remain OpenCode's.
   Development controls remain source-only. UI layout, host document-title control,
   model-management policy and other deployment decisions remain owned by nexus-ui.
+- The Superagent stores (`rho.channels`, `rho.inbox`, `rho.skill_drafts`) keep the
+  reference namespaces and keys. Their mutations retry a Conflict up to eight
+  attempts at the call site, matching the reference's CAS hardening; the shared
+  `StoreDocument` reconcile semantics are unchanged.
+- Personal-desk conversations carry `opencode.surface: "personal_desk"` metadata,
+  the runtime's established metadata namespace, where the reference writes
+  `rho.surface`. Draft and rule public IDs use `crypto.randomUUID()` rather than
+  UUIDv7. Quiet hours honor the configured `time_zone`; the reference formats in
+  UTC. The Telegram outbox pump drains enabled connections only.
+- `rho-t3` has no TypeScript successor: the reference removed the package, and the
+  runtime, UI and their tests removed the corresponding owners in the same review.
 
 ## Verification
 
 `bun run test:conformance` requires `OPENCODE_NEXUS_CHROMIUM` pointing at an isolated
 Chromium executable. It exercises the production owners with local HTTP/WebSocket,
-MCP, OAuth, ACP/T3 child fixtures, real browser, PTY and WebRTC transports.
+MCP, OAuth, ACP child fixtures, real browser, PTY and WebRTC transports.
 On macOS, the Playwright `chrome-headless-shell` executable also satisfies this
 gate and avoids the full Chrome application's display-process startup dependency.
 

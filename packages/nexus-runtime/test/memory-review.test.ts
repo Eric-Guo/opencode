@@ -198,6 +198,23 @@ test("a memory proposal cannot overwrite an edited document or recreate a delete
   }
 })
 
+test("memory review consolidates completed turns on the configured cadence", async () => {
+  const value = fixture()
+  const review = new MemoryReview(value.client, "workspace", "conversation")
+  try {
+    await review.enable("speaker/review.md", undefined, -1, "human")
+    const turn = await value.client.workspace("workspace").conversation("conversation").turns.fetch("turn")
+    for (const position of [0, 1, 2, 3]) await review.settled({ ...turn, position }, 5)
+    expect(value.state.forks).toHaveLength(0)
+    await review.settled({ ...turn, position: 4 }, 5)
+    expect(value.state.forks).toHaveLength(1)
+    await review.settled({ ...turn, position: 5 }, 5)
+    expect(value.state.forks).toHaveLength(1)
+  } finally {
+    value.server.stop(true)
+  }
+})
+
 test("review output bounds include source references and count UTF-8 bytes", () => {
   const source = { conversation: "conversation", turn: "turn", run: "run", date: "2026-11-15" }
   expect(renderReview({ content: "x".repeat(6144), summary: "summary" }, source)).toBeUndefined()

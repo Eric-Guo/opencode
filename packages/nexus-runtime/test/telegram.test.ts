@@ -402,6 +402,12 @@ function fixture(group = true) {
           },
         ],
       })
+    if (path.endsWith("/profile"))
+      return Response.json({
+        member: { public_id: "main", handle: "@main", kind: "agent", role: "member" },
+        credential: { plane: "member" },
+        measured_at: new Date(now).toISOString(),
+      })
     if (path.endsWith("/tools")) return Response.json({ tools: [] })
     if (path.endsWith("/agent_api/v1/conversations")) {
       historyReads.push(Object.fromEntries(url.searchParams))
@@ -436,6 +442,14 @@ function fixture(group = true) {
     }
     if (path.endsWith("/workspaces/workspace/conversations") && request.method === "POST")
       return Response.json({ conversation: conversationFixture({ answering_user_public_id: bot }) }, { status: 201 })
+    if (path.endsWith("/conversations/personal-conversation"))
+      return Response.json({
+        conversation: conversationFixture({
+          public_id: "personal-conversation",
+          answering_user_public_id: "main",
+          metadata: { "opencode.bot": "personal", "opencode.surface": "personal_desk" },
+        }),
+      })
     if (path.endsWith("/conversations/conversation") || path.endsWith("/conversations/new-conversation"))
       return Response.json({
         conversation: conversationFixture({
@@ -678,6 +692,7 @@ function fixture(group = true) {
     current,
     open,
     saved,
+    seed,
     [Symbol.dispose]() {
       service.server.stop(true)
     },
@@ -715,6 +730,11 @@ test("a polled update survives a missing binding and recovers with its original 
   await moved.poll(connection, now + 700000)
   expect(peer.schedules).toHaveLength(2)
   expect(peer.schedules[1]).toEqual(peer.schedules[0])
+  expect(peer.schedules[0].body.rule).toMatchObject({
+    kind: "interval",
+    every_seconds: 60,
+    starts_at: expect.any(String),
+  })
   expect(peer.requests.filter((path) => path.endsWith("/getUpdates"))).toHaveLength(1)
   expect(connectionState()).toMatchObject({ offset: 9, pending: null })
   expect(peer.saved().jobs?.[0]?.id).toBe("job")
@@ -994,6 +1014,63 @@ test("Telegram rejects duplicate tokens and target reuse, including disabled bin
         bots: { [bot]: { connection_public_id: connection, target: { chat_id: "20", topic_id: 5 } } },
       }),
   ).toThrow("group")
+})
+
+test("Telegram accepts the personal Bot key and binds it with owner audience", () => {
+  const settings = new TelegramSettings({
+    connections: { [connection]: { token: "fixture-token" } },
+    bots: { personal: { enabled: true, connection_public_id: connection, target: { chat_id: "10" }, owner_id: "10" } },
+  })
+  expect(Object.keys(settings.bots)).toEqual(["personal"])
+  expect(settings.bots.personal.enabled).toBe(true)
+  expect(() => new TelegramSettings({ connections: {}, bots: { "named-bot": {} } })).toThrow()
+})
+
+test("Telegram admits personal Bot input for the owner and answers as the owner", async () => {
+  using peer = fixture()
+  peer.seed("opencode.bot-conversations", "personal", {
+    current: { public_id: "personal-conversation", workspace_public_id: "workspace" },
+    receipts: {},
+  })
+  const ingress = peer.open({
+    personal: {
+      enabled: true,
+      connection_public_id: connection,
+      target: { chat_id: "10" },
+      owner_id: "10",
+      input_debounce_seconds: 2,
+    },
+  })
+  const owner = { id: 10, first_name: "Owner" }
+
+  await ingress.ingest(connection, message(1, "Hello", { from: owner, chat: { id: 10, type: "private" } }), now)
+  await ingress.tick(connection, now + 3000)
+  expect(peer.inputs).toHaveLength(1)
+  expect(peer.inputs[0].conversation).toBe("personal-conversation")
+  expect(peer.inputs[0].body).toMatchObject({
+    answering_user_public_id: "main",
+    speaker_public_id: "speaker-10",
+    model: { model: "provider/original" },
+    kind: "direct_reply",
+  })
+})
+
+test("Telegram refuses personal Bot input outside the owner's private chat", async () => {
+  using peer = fixture()
+  const ingress = peer.open({
+    personal: {
+      enabled: true,
+      connection_public_id: connection,
+      target: { chat_id: "-100" },
+      owner_id: "10",
+      input_debounce_seconds: 2,
+    },
+  })
+  const owner = { id: 10, first_name: "Owner" }
+
+  await ingress.ingest(connection, message(1, "Hello", { from: owner }), now)
+  await ingress.tick(connection, now + 3000)
+  expect(peer.inputs).toHaveLength(0)
 })
 
 test("Telegram distinguishes topics from ordinary replies and uses UTF-16 mention offsets", () => {

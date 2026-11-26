@@ -9,9 +9,11 @@ import {
   type ExecutionDecision,
   type Input,
   type JsonValue,
+  type OutboxMessage,
 } from "@cybros/agent"
 import type { Nexus } from "@opencode/schema/nexus"
 import type { NexusApplication } from "./application"
+import { Channels } from "./channels"
 import { StoreDocument } from "./document"
 import { TelegramSettings, type TelegramBinding } from "./telegram-settings"
 import { TelegramRawUpdate, TelegramUpdate } from "./telegram-update"
@@ -93,8 +95,9 @@ export class TelegramIngress {
   }
 
   run() {
-    this.running ??= Promise.all(
-      Object.entries(this.settings.connections)
+    Channels.registerAdapter("telegram", (message) => this.deliverOutbox(message))
+    this.running ??= Promise.all([
+      ...Object.entries(this.settings.connections)
         .filter(([, row]) => row.enabled && row.token)
         .map(async ([id]) => {
           while (!this.signal.aborted) {
@@ -113,13 +116,99 @@ export class TelegramIngress {
             }
           }
         }),
-    ).then(() => {})
+      ...(Object.values(this.settings.connections).some((row) => row.enabled && row.token) ? [this.pumpOutbox()] : []),
+    ]).then(() => {})
     return this.running
   }
 
   async close() {
+    Channels.unregisterAdapter("telegram")
     this.stopped.abort()
     await this.running
+  }
+
+  /** A failed pass never kills the pump; the next interval retries it. */
+  private async pumpOutbox() {
+    while (!this.signal.aborted) {
+      try {
+        const client = this.application().client
+        const workspaces = await client.workspaces.list({ limit: 20 }, { signal: this.signal })
+        const channels = new Channels(client.profile.storeEntries)
+
+        for (const workspace of workspaces.items) {
+          for (const [id, row] of Object.entries(this.settings.connections)) {
+            if (!row.enabled || !row.token) continue
+            await channels.drainOutbox({
+              client,
+              workspace_public_id: workspace.public_id,
+              channel_key: "telegram:" + id,
+              limit: 10,
+              lease_seconds: 30,
+            })
+          }
+        }
+      } catch {
+        if (this.signal.aborted) break
+      }
+      await setTimeout(2000, undefined, { signal: this.signal }).catch(() => {})
+    }
+  }
+
+  /** Proactive outbox delivery shares the connection budget; the verdict contract mirrors rho's adapter. */
+  async deliverOutbox(message: OutboxMessage): Promise<"sent" | "uncertain" | ["dropped", string] | ["failed", string]> {
+    const separator = message.channel_key.indexOf(":")
+    const prefix = separator === -1 ? message.channel_key : message.channel_key.slice(0, separator)
+
+    if (prefix !== "telegram") return ["failed", "unsupported_channel_key"]
+
+    const requested = separator === -1 ? "" : message.channel_key.slice(separator + 1)
+    const active = Object.entries(this.settings.connections).filter(([, row]) => row.enabled && row.token)
+
+    if (requested === "" && active.length !== 1) return ["failed", "ambiguous_or_missing_telegram_connection"]
+
+    const id = requested === "" ? active[0][0] : requested
+    const target = this.settings.connections[id]
+
+    if (!target?.enabled || !target.token) return ["failed", "telegram_connection_unavailable"]
+
+    const split = message.thread_key.indexOf(":")
+    const chat = split === -1 ? message.thread_key : message.thread_key.slice(0, split)
+    const topic = split === -1 ? "" : message.thread_key.slice(split + 1)
+
+    if (chat === "") return ["dropped", "channel_gone"]
+    if (topic !== "" && !/^[+-]?\d+$/.test(topic)) return ["dropped", "channel_gone"]
+
+    const params: { chat_id: string; text: string; message_thread_id?: number } = { chat_id: chat, text: message.body }
+
+    if (topic !== "") params.message_thread_id = Number(topic)
+
+    try {
+      const sent = await this.transport(id).send(
+        { connection: id, chat, topic: topic === "" ? null : Number(topic), group: chat.startsWith("-") },
+        Date.now(),
+        (api) => api.call("sendMessage", params),
+      )
+
+      return sent ? "sent" : ["failed", "rate_limited"]
+    } catch (error) {
+      // A 5xx refusal is an ambiguous unavailable on the wire: the send may have occurred.
+      if (error instanceof TelegramError && error.code >= 500) return "uncertain"
+      if (error instanceof TelegramError) {
+        const description = error.description ?? error.message
+        const text = description.toLowerCase()
+
+        if (
+          error.code === 403 ||
+          text.includes("chat not found") ||
+          text.includes("thread not found") ||
+          text.includes("kicked")
+        )
+          return ["dropped", "channel_gone"]
+        return ["failed", description]
+      }
+      if (error instanceof TelegramUncertain) return "uncertain"
+      return ["failed", "telegram_unavailable"]
+    }
   }
 
   status() {

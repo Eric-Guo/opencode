@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import type { NexusCommand } from "@opencode/protocol/nexus-command"
+import { Schema } from "effect"
+import { NexusCommand } from "@opencode/protocol/nexus-command"
 import { runJobs } from "../src/jobs"
 
 test("conversation jobs preserve cursor scope, edit the fetched version and send multiline prompts", async () => {
@@ -45,6 +46,12 @@ test("conversation jobs preserve cursor scope, edit the fetched version and send
     rule: job.rule,
     key: expect.any(String),
   })
+  expect(JSON.parse(await run(["create", "every", "20m", "Report"], true))).toEqual(job)
+  expect(commands.at(-1)).toMatchObject({
+    action: "schedule.create",
+    prompt: "Report",
+    rule: { kind: "interval", every_seconds: 1200, starts_at: expect.any(String) },
+  })
   for (const action of ["pause", "resume", "run", "cancel", "show"]) await run([action, "job"])
   expect(commands.slice(-5).map((command) => command.action)).toEqual([
     "schedule.pause",
@@ -55,4 +62,38 @@ test("conversation jobs preserve cursor scope, edit the fetched version and send
   ])
   await expect(run(["edit", "job", "daily", "25:00", "UTC"])).rejects.toThrow()
   expect(commands.at(-1)?.action).toBe("schedule.read")
+})
+
+test("schedule commands accept the optional wake mode on create and update", () => {
+  expect(
+    Schema.decodeUnknownSync(NexusCommand)({
+      action: "schedule.create",
+      workspace: "work",
+      conversation: "chat",
+      key: "key",
+      prompt: "Report",
+      rule: { kind: "daily", local_time: "09:00", time_zone: "UTC" },
+      wake: "passive",
+    }),
+  ).toMatchObject({ wake: "passive" })
+  expect(
+    Schema.decodeUnknownSync(NexusCommand)({
+      action: "schedule.update",
+      workspace: "work",
+      conversation: "chat",
+      id: "job",
+      version: 1,
+      wake: "auto",
+    }),
+  ).toMatchObject({ wake: "auto" })
+  expect(() =>
+    Schema.decodeUnknownSync(NexusCommand)({
+      action: "schedule.update",
+      workspace: "work",
+      conversation: "chat",
+      id: "job",
+      version: 1,
+      wake: "loud",
+    }),
+  ).toThrow()
 })

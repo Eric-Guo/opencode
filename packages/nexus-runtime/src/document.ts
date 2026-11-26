@@ -1,8 +1,19 @@
-import { APIError, TransportError, type Client, type StoreEntry } from "@cybros/agent"
+import { APIError, Conflict, TransportError, type Client, type StoreEntry } from "@cybros/agent"
 import { isDeepStrictEqual } from "node:util"
 import { Schema } from "effect"
 
 type Store = Client["profile"]["storeEntries"]
+
+/** A conflicting scoped mutation retries immediately, up to eight total attempts, matching rho's call-site CAS hardening. */
+export async function changeDocument<T extends Schema.Json>(document: StoreDocument<T>, edit: (current: T | null) => T) {
+  for (let attempts = 1; ; attempts++) {
+    try {
+      return await document.change(edit)
+    } catch (error) {
+      if (!(error instanceof Conflict) || attempts >= 8) throw error
+    }
+  }
+}
 
 /** One scoped current value. Reconcile uncertain writes without replaying the mutation. */
 export class StoreDocument<T extends Schema.Json> {

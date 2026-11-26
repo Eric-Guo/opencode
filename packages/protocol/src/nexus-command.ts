@@ -17,6 +17,7 @@ const ScheduleControls = {
   reasoning_enabled: Schema.optional(Schema.Boolean),
   fallback_models: Schema.optional(Schema.Array(Schema.NonEmptyString)),
   tool_names: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+  wake: Schema.optional(Schema.Literals(["auto", "passive"])),
 }
 const InferenceScope = { workspace: Schema.optional(Schema.NonEmptyString) }
 export const InferenceCommand = Schema.Union([
@@ -200,6 +201,22 @@ export const NexusCommand = Schema.Union([
     conversation: Schema.String,
     key: Schema.NonEmptyString,
     prompt: Schema.String,
+    name: Schema.optional(Schema.String),
+    rule: Rule,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("routine.create"),
+    model: Schema.optional(Schema.NonEmptyString),
+    reasoning_effort: Schema.optional(Schema.String),
+    reasoning_enabled: Schema.optional(Schema.Boolean),
+    fallback_models: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+    tool_names: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+    workspace: Schema.optional(Schema.NonEmptyString),
+    conversation: Schema.optional(Schema.NonEmptyString),
+    approval: Schema.optional(Schema.Literals(["ask", "rules", "bypass"])),
+    key: Schema.optional(Schema.NonEmptyString),
+    what: Schema.NonEmptyString,
+    does: Schema.optional(Schema.Literals(["act", "check_in"])),
     name: Schema.optional(Schema.String),
     rule: Rule,
   }),
