@@ -221,11 +221,14 @@ story.beforeEach(async ({ mount, page }) => {
       pruneKeys: layoutKeys.pruneSessionKeys,
     })
   }, modules)
+
+  // Switching to Beta before the browser plugin loads skips Alpha's registration.
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
 })
 
 story("routes an exact HTML file to the pane and reports an unavailable pane instead of opening a file preview", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   const open = root.getByRole("button", { name: "Open workspace HTML" })
   await open.click()
   await expect(root.getByText("file:///repo/report.html", { exact: true })).toBeVisible()
@@ -238,7 +241,6 @@ story("routes an exact HTML file to the pane and reports an unavailable pane ins
 story("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
@@ -265,7 +267,6 @@ story("closes a blank browser tab from its address field without closing the ses
 story("toggles the element picker from the shortcut only inside the browser pane", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
@@ -309,7 +310,6 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
     .frameLocator('iframe[title="Browser page"]')
     .getByRole("textbox", { name: "Editor page input", exact: true })
 
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -370,7 +370,6 @@ story(
     const composer = root.getByRole("textbox", { name: "Composer", exact: true })
     const side = root.getByTestId("side-state")
 
-    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
     await root.getByRole("button", { name: "Beta", exact: true }).click()
     await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
     await root.getByRole("button", { name: "Blank page", exact: true }).click()
@@ -397,7 +396,6 @@ story("opens a browser tab with ⌘T inside the pane and a session everywhere el
   const editor = page.frameLocator('iframe[title="Browser page"]').getByRole("textbox", { name: "Editor page input" })
   const opens = root.getByTestId("browser-opens")
   const sessions = root.getByTestId("new-sessions")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   // The + advertises the browser launcher's own shortcut, whichever tab shows; ⌘T stays the pane's.
   await expect(root.getByTestId("add-shortcut")).toHaveText(mac ? "⌃⌘B" : "Ctrl+Alt+B")
   await outside.click()
@@ -453,7 +451,6 @@ story("⌘T and ⌘W follow focus: side tabs inside the side panel, session tabs
   const sessions = root.getByTestId("new-sessions")
   const opens = root.getByTestId("browser-opens")
   const newTab = root.getByTestId("side-new-tab")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(root.getByTestId("selected")).toHaveText(/^browser:/)
@@ -502,7 +499,6 @@ story("⌘L selects the browser address from the page and the pane, and nowhere 
         input.selectionEnd === input.value.length,
     )
 
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(root.getByTestId("selected")).toHaveText(/^browser:/)
@@ -528,7 +524,6 @@ story("⌘L selects the browser address from the page and the pane, and nowhere 
 story("keeps ⌘T in the browser pane after a click on its loading surface", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(root.getByTestId("selected")).toHaveText(/^browser:/)
@@ -548,7 +543,6 @@ story("reloads the browser tab with ⌘R inside the pane and leaves it to the wi
   const outside = root.getByRole("button", { name: "Beta", exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   const reloads = root.getByTestId("browser-reloads")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -582,7 +576,6 @@ story("keeps blank browser tabs when adding tabs and selecting another panel", a
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
@@ -606,7 +599,6 @@ story("a new tab request that opened no blank tab leaves a later blank page's ad
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   const composer = root.getByRole("textbox", { name: "Composer", exact: true })
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
@@ -639,7 +631,6 @@ story("reopens a closed browser tab with ⌘⇧T after the side panel and a sess
       [target, mac] as const,
     )
 
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -670,7 +661,6 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
   const panel = page.locator("#review-panel")
   const editor = page.frameLocator('iframe[title="Browser page"]').getByRole("textbox", { name: "Editor page input" })
   const selected = root.getByTestId("selected")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await outside.click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(selected).toHaveText(/^browser:/)
@@ -701,7 +691,6 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
 story("keeps a restored browser tab with no saved page selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await expect(tabs).toHaveText(["alpha.ts"])
 
   // Beta was left on its browser tab, which the desktop has not reported yet and no earlier run saved a title for.
@@ -1195,7 +1184,6 @@ story(
   async ({ page }) => {
     const root = page.getByTestId("browser-region-fixture")
     const tabs = root.getByRole("tab")
-    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
     await root.getByRole("button", { name: "Beta", exact: true }).click()
     await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
     await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -1220,7 +1208,6 @@ story(
     const root = page.getByTestId("browser-region-fixture")
     const reloads = root.getByTestId("browser-reloads")
     const reviews = root.getByTestId("review-toggles")
-    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
     await root.getByRole("button", { name: "Beta", exact: true }).click()
     await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
     await root.getByRole("button", { name: "First inventory", exact: true }).click()
