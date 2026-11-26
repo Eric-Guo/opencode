@@ -73,27 +73,31 @@ function decode(input: string) {
   }
 }
 
-export const layer = Layer.effect(
-  LocationMiddleware,
-  Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
-    const fs = yield* FSUtil.Service
-    const sessions = yield* Session.Service
-    const initialize = Effect.fnUntraced(function* (ref: Location.Ref) {
-      if (yield* fs.existsSafe(ref.directory)) return
-      // Draft-first clients request catalogs before creating a Session. Preserve 404s for paths
-      // that already have a recorded Session, including locations deleted after their first use.
-      const recorded = yield* sessions.list({ directory: ref.directory, limit: 1 }).pipe(Effect.orDie)
-      if (recorded.data.length > 0) return
-      yield* fs.ensureDir(ref.directory).pipe(Effect.orDie)
-    })
-    return LocationMiddleware.of((effect) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest
-        const ref = LocationServiceMap.canonical(requestRef(request))
-        yield* initialize(ref)
-        return yield* effect.pipe(Effect.provide(locations.get(ref)), locationErrors)
-      }),
-    )
-  }),
-)
+export const locationLayer = (createDirectories = true) =>
+  Layer.effect(
+    LocationMiddleware,
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const fs = yield* FSUtil.Service
+      const sessions = yield* Session.Service
+      const initialize = Effect.fnUntraced(function* (ref: Location.Ref) {
+        if (yield* fs.existsSafe(ref.directory)) return
+        // Draft-first clients request catalogs before creating a Session. Preserve 404s for paths
+        // that already have a recorded Session, including locations deleted after their first use.
+        const recorded = yield* sessions.list({ directory: ref.directory, limit: 1 }).pipe(Effect.orDie)
+        if (recorded.data.length > 0) return
+        yield* fs.ensureDir(ref.directory).pipe(Effect.orDie)
+      })
+      return LocationMiddleware.of((effect, options) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const ref = LocationServiceMap.canonical(requestRef(request))
+
+          // VCS initialization requires an existing project directory.
+          if (createDirectories && options.endpoint.identifier !== "vcs.init") yield* initialize(ref)
+
+          return yield* effect.pipe(Effect.provide(locations.get(ref)), locationErrors)
+        }),
+      )
+    }),
+  )

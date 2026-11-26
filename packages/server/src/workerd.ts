@@ -10,7 +10,6 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Identity } from "@opencode/core/machine/identity"
 import { Pty } from "@opencode/core/pty"
-import { Session } from "@opencode/core/session"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Workspace } from "@opencode/core/workspace"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -93,7 +92,7 @@ export function serverOptions(options: Options): ServerOptions {
   return {
     app: options.app,
     password: options.password,
-    fs: { filewatcher: false, fff: false },
+    fs: { filewatcher: false, fff: false, createDirectories: false },
     // Durable event history is how a turn orphaned by eviction is recovered:
     // the boot-time resume replays it. A runtime that dies without teardown
     // cannot opt out of it, so this is not exposed as an option.
@@ -124,7 +123,6 @@ export function replacements(options: Options): LayerNode.Replacements {
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
     BlobStore.node.replace(BlobStore.unsupportedLayer),
     VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
-    Session.node.replace(Session.configured({ createDirectories: false })),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
