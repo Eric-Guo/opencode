@@ -5,7 +5,7 @@ export async function listTerminalRuns(
   after?: string,
   options?: RequestOptions,
 ) {
-  const page = await workspace.runs.list({ kind: "standalone", order: "desc", after, limit: 20 }, options)
+  const page = await workspace.runs.list({ kind: "standalone", tool_name: "terminal", order: "desc", after, limit: 20 }, options)
   const rows = await Promise.all(
     page.items.map(async (run) => {
       const detail = await workspace

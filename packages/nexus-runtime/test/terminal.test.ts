@@ -6,7 +6,7 @@ import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Pty } from "@opencode/core/pty"
 import { AbsolutePath } from "@opencode/schema/schema"
-import type { TaskRealtime } from "@cybros/agent"
+import { APIError, type TaskRealtime } from "@cybros/agent"
 import { tmpdir } from "node:os"
 import { location } from "../../core/test/fixture/location"
 import { testEffect } from "../../core/test/lib/effect"
@@ -39,6 +39,7 @@ terminalTest(
             reason: null,
             connection_id: null,
             offer_sdp: null,
+            ice_servers: null,
             answer_sdp: null,
             max_age_ms: 1000,
           },
@@ -130,4 +131,155 @@ terminalTest(
       })
     }),
   15000,
+)
+
+// A real STUN binding responder proves the inherited deployment server is actually used for gathering.
+async function stunResponder() {
+  const server = await Bun.udpSocket({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data(socket, message, port, address) {
+        if (message.length < 20 || message.readUInt16BE(0) !== 0x0001 || message.readUInt32BE(4) !== 0x2112a442)
+          return
+
+        const response = Buffer.alloc(32)
+
+        response.writeUInt16BE(0x0101, 0)
+        response.writeUInt16BE(12, 2)
+        message.copy(response, 4, 4, 20)
+        response.writeUInt16BE(0x0020, 20)
+        response.writeUInt16BE(8, 22)
+        response.writeUInt8(1, 25)
+        response.writeUInt16BE(port ^ 0x2112, 26)
+        response.writeUInt32BE((ipv4(address) ^ 0x2112a442) >>> 0, 28)
+        socket.send(response, port, address)
+      },
+    },
+  })
+
+  return server
+}
+
+function ipv4(address: string) {
+  return address.split(".").reduce((acc, part) => (acc << 8) | Number(part), 0)
+}
+
+terminalTest(
+  "a terminal without configured ICE servers inherits the handshake servers and retries through the relay",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+
+      yield* Effect.promise(async () => {
+        const owner = new AbortController()
+        const stun = await stunResponder()
+        const offers: string[] = []
+        const state: { value: TaskRealtime } = {
+          value: {
+            status: "active",
+            reason: null,
+            connection_id: null,
+            offer_sdp: null,
+            ice_servers: [{ urls: ["stun:127.0.0.1:" + stun.port] }],
+            answer_sdp: null,
+            max_age_ms: 1000,
+          },
+        }
+        const work = terminalTools(tmpdir(), owner.signal, { pty: async () => pty })[0]!.execute(
+          {},
+          {
+            workspace: "workspace",
+            conversation: null,
+            run: "run",
+            task: "terminal",
+            directory: tmpdir(),
+            signal: owner.signal,
+            realtime: {
+              read: async () => state.value,
+              offer: async (input) => {
+                offers.push(input.sdp)
+                if (offers.length === 1) throw new APIError("Unavailable", 503, "unavailable", null, null, null)
+
+                state.value = { ...state.value, connection_id: input.connection_id, offer_sdp: input.sdp }
+                return state.value
+              },
+            },
+          },
+        )
+
+        void work.catch(() => {})
+
+        try {
+          const deadline = AbortSignal.timeout(10000)
+
+          while (offers.length < 2) {
+            deadline.throwIfAborted()
+            await Bun.sleep(5)
+          }
+
+          expect(offers[0]).toContain("typ srflx")
+          expect(offers[1]).not.toContain("typ host")
+        } finally {
+          owner.abort()
+          await work.catch(() => {})
+          stun.close()
+        }
+      })
+    }),
+  15000,
+)
+
+terminalTest(
+  "a refused handshake ICE servers read closes the terminal signaling before any offer",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+
+      yield* Effect.promise(async () => {
+        const owner = new AbortController()
+        let reads = 0
+        const offers: string[] = []
+        const work = terminalTools(tmpdir(), owner.signal, { pty: async () => pty })[0]!.execute(
+          {},
+          {
+            workspace: "workspace",
+            conversation: null,
+            run: "run",
+            task: "terminal",
+            directory: tmpdir(),
+            signal: owner.signal,
+            realtime: {
+              read: async () => {
+                reads++
+                throw new APIError("Not found", 404, "not_found", null, null, null)
+              },
+              offer: async (input) => {
+                offers.push(input.sdp)
+                throw new Error("The closed handshake must not receive an offer.")
+              },
+            },
+          },
+        )
+
+        void work.catch(() => {})
+
+        try {
+          const deadline = AbortSignal.timeout(5000)
+
+          while (!reads) {
+            deadline.throwIfAborted()
+            await Bun.sleep(5)
+          }
+
+          await Bun.sleep(300)
+          expect(reads).toBe(1)
+          expect(offers).toEqual([])
+        } finally {
+          owner.abort()
+          await expect(work).rejects.toThrow()
+        }
+      })
+    }),
+  10000,
 )

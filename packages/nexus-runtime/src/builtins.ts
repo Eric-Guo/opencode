@@ -10,10 +10,10 @@ import { missing } from "./storage"
 import { acpConfiguration } from "./acp-settings"
 import { readEffect } from "./runner"
 import { mcpConfiguration, mcpDefaults } from "./mcp-settings"
-import { t3Configuration } from "./t3-settings"
 import { telegramConfiguration } from "./telegram-settings"
 import { memoryReviewExtension } from "./memory-review-extension"
 import { skillsExtension } from "./skills"
+import { superagentTools } from "./superagent-tools"
 import { processesExtension } from "./processes"
 import { conventionsExtension } from "./conventions"
 import { executionExtensions } from "./execution-settings"
@@ -68,6 +68,7 @@ export async function builtinExtensions(
     ...executionExtensions(),
     memoryReviewExtension(),
     skillsExtension(),
+    superagentTools(),
     ...(processes ? [processes] : []),
     conventionsExtension(storage),
     ...capabilityExtensions(),
@@ -162,49 +163,6 @@ export async function builtinExtensions(
 
           return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(result))
         })
-      },
-    },
-    {
-      descriptor: {
-        id: "nexus.t3",
-        name: "Coding delegation",
-        description: "Delegate coding work to a T3 service.",
-        default_enabled: !!process.env.OPENCODE_NEXUS_T3_URL,
-        configuration_version: 1,
-        configuration_schema: t3Configuration,
-        defaults: {
-          url: process.env.OPENCODE_NEXUS_T3_URL ?? "",
-          token: process.env.OPENCODE_NEXUS_T3_TOKEN ?? "",
-          project: process.env.OPENCODE_NEXUS_T3_PROJECT ?? "",
-        },
-      },
-      async register(api) {
-        if (!storage) throw new Error("T3 requires runtime storage.")
-        if (api.configuration.server === "local") api.restartOnly()
-        const { T3Client } = await import("./t3")
-        const client = new T3Client(api.configuration, {
-          application: api.application,
-          directory: api.directory,
-          storage: join(storage, "t3"),
-          signal: api.signal,
-          configure: api.configure,
-        })
-
-        api.onShutdown(() => client.close())
-        api.describeStatus(() => client.status())
-        await client.start()
-        client.tools().forEach(api.registerTool)
-        for (const name of [
-          "t3.status",
-          "t3.agents",
-          "t3.projects",
-          "t3.check",
-          "t3.login",
-          "t3.token",
-          "t3.project",
-          "t3.create",
-        ])
-          api.registerCommand(name, (input) => client.command(Schema.decodeUnknownSync(Schema.MutableJson)(input)))
       },
     },
     {

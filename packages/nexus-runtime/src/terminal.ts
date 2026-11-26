@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { setTimeout } from "node:timers/promises"
-import { APIError, TransportError } from "@cybros/agent"
+import { APIError, TransportError, type JsonObject } from "@cybros/agent"
 import type { HostTools } from "./host"
 import type { RunnerContext } from "./extensions"
 import { OutputWindow, RealtimeLease, RealtimePeer, type RealtimeOptions } from "./realtime"
@@ -56,6 +56,7 @@ export async function terminalSession(
   let failures = 0
   let relay = options.relay ?? false
   let retryAfter = 0
+  let inherited: RealtimeOptions["servers"]
 
   try {
     while (!signal.aborted && !shell.ended) {
@@ -70,7 +71,10 @@ export async function terminalSession(
       const timestamp = Date.now().toString(16).padStart(12, "0")
       const id = timestamp.slice(0, 8) + "-" + timestamp.slice(8) + "-7" + crypto.randomUUID().slice(15)
       try {
-        peer = await RealtimePeer.create({ ...options, relay })
+        if (!options.servers?.length && inherited === undefined)
+          inherited = iceServers((await realtime.read()).ice_servers)
+        const servers = options.servers?.length ? options.servers : (inherited ?? [])
+        peer = await RealtimePeer.create({ ...options, servers, relay })
         const sdp = await peer.offer()
         const started = performance.now()
         const current = await realtime.read()
@@ -103,7 +107,7 @@ export async function terminalSession(
             ? Math.max(0, Number(error.retryAfter) * 1000 || Date.parse(error.retryAfter ?? "") - Date.now() || 0)
             : 0
         failures = Math.min(failures + 1, 4)
-        relay ||= Boolean(options.servers?.length)
+        relay ||= Boolean((options.servers?.length ? options.servers : inherited)?.length)
         continue
       }
       let resumed = false
@@ -206,7 +210,7 @@ export async function terminalSession(
       await peer.close()
       peer = undefined
       failures = Math.min(failures + 1, 4)
-      relay ||= Boolean(options.servers?.length)
+      relay ||= Boolean((options.servers?.length ? options.servers : inherited)?.length)
     }
 
     context.signal.throwIfAborted()
@@ -219,4 +223,19 @@ export async function terminalSession(
     if (shell.id) await Effect.runPromise(pty.remove(shell.id)).catch(() => {})
     window.clear()
   }
+}
+
+/** Deployment ICE servers inherited from the realtime projection when the local configuration supplied none. */
+function iceServers(entries: JsonObject[] | null): RealtimeOptions["servers"] {
+  return (entries ?? []).flatMap((entry): { urls: string | string[]; username?: string; credential?: string }[] => {
+    const auth = {
+      ...(typeof entry.username === "string" ? { username: entry.username } : {}),
+      ...(typeof entry.credential === "string" ? { credential: entry.credential } : {}),
+    }
+    if (typeof entry.urls === "string") return [{ urls: entry.urls, ...auth }]
+    if (!Array.isArray(entry.urls)) return []
+    const urls = entry.urls.filter((url): url is string => typeof url === "string")
+
+    return urls.length ? [{ urls, ...auth }] : []
+  })
 }

@@ -28,6 +28,7 @@ import { Until, untilParagraph } from "./until"
 import { TurnLifecycle } from "./turn-lifecycle"
 import { boundRootDescription, Environments } from "./environments"
 import { SideConversations, sideLeads, sideReadTools } from "./sides"
+import { memoryContext } from "./speakers"
 import { StoreDocument } from "./document"
 import { ConversationTitles } from "./conversation-titles"
 import { Runners } from "./runners"
@@ -402,6 +403,7 @@ export class NexusApplication {
       {
         answering_user_public_id: recipient,
         default_runner_executor_public_id: runner,
+        memory_context: memoryContext(),
         ...(input.restricted
           ? {
               access: {

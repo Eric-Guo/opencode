@@ -571,3 +571,37 @@ test("callable and canonical Preset names survive admission and a restricted rol
     fixture.server.stop(true)
   }
 })
+
+test("opened conversations bind the byte-stable memory index by default", async () => {
+  const created: JsonObject[] = []
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+
+    if (path.endsWith("/conversations") && request.method === "POST") {
+      const body = (await request.json()) as { conversation: JsonObject }
+      created.push(body.conversation)
+      return Response.json({ conversation: conversationFixture(body.conversation) }, { status: 201 })
+    }
+  })
+  const application = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+
+  try {
+    await application.open({ key: "open" })
+    expect(created).toHaveLength(1)
+    expect(created[0].memory_context).toEqual({
+      bindings: [
+        { name: "conversation", source: { scope: "conversation" }, access: "read_write" },
+        { name: "speaker", source: { scope: "speaker" }, access: "read_write" },
+        { name: "agent", source: { scope: "agent" }, access: "read_write" },
+        { name: "workspace", source: { scope: "workspace" }, access: "read_write" },
+      ],
+      mode: "index",
+    })
+  } finally {
+    fixture.server.stop(true)
+  }
+})

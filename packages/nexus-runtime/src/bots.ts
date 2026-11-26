@@ -15,6 +15,17 @@ import { Presets } from "./presets"
 import { InputAdmissions } from "./admission"
 import { externalBot, externalRoles, isSubagentTool } from "./bot-policy"
 import { compactionInstructions } from "./capabilities"
+import { memoryContext } from "./speakers"
+
+export const personalBot = "personal"
+
+const personalSettings = {
+  audience: "owner",
+  home_workspace_public_id: null,
+  preset_public_id: "",
+  welcome_message: null,
+  subagent: true,
+} as const
 
 const Locator = Schema.Struct({ public_id: Schema.String, workspace_public_id: Schema.String })
 const Receipt = Schema.Struct({
@@ -60,6 +71,7 @@ export class Bots {
   private readonly gates = new Map<string, Promise<void>>()
   private readonly creations = new Map<string, StoreDocument<typeof Creation.Type>>()
   private readonly admissions: InputAdmissions
+  private own?: string
 
   constructor(
     private readonly member: Client,
@@ -76,6 +88,7 @@ export class Bots {
 
   async command(command: NexusBot.Command, options?: { signal: AbortSignal }) {
     if (command.action === "bot.submit") return this.submit(command)
+    if ("id" in command && command.id === personalBot) return this.personal(command, options)
     const agents = (await this.member.profile.agents.list(options)).filter(
       (agent) => agent.scope === "instance" && agent.name.startsWith("bot-"),
     )
@@ -163,7 +176,52 @@ export class Bots {
 
     if (!("key" in command)) throw new Error("Unknown Bot command.")
 
-    return this.serial(agent.public_id, () => this.switch(agent, command))
+    return this.serial(agent.public_id, () => this.switch(agent.public_id, command))
+  }
+
+  private async personal(
+    command: Exclude<Extract<NexusBot.Command, { id: string }>, { action: "bot.submit" }>,
+    options?: { signal: AbortSignal },
+  ) {
+    if (command.action === "bot.read")
+      return {
+        public_id: personalBot,
+        name: "personal",
+        handle: "personal",
+        display_name: "Personal Agent",
+        description: "Direct personal reach for the owner.",
+        configuration: { default_model: this.base().default_model ?? null },
+        settings: await this.readSettings(personalBot),
+        current: (await this.state(personalBot).read())?.current ?? null,
+      }
+    if (command.action === "bot.history")
+      return this.member.conversations.list(
+        {
+          archived: command.archived,
+          after: command.after,
+          limit: command.limit,
+          answering_user_public_id: await this.ownUser(options),
+          metadata_key: "opencode.bot",
+          metadata_value: personalBot,
+          order_by: "last_activity_at",
+          order: "desc",
+        },
+        options,
+      )
+    if (
+      command.action === "bot.configure" ||
+      command.action === "bot.duplicate" ||
+      command.action === "bot.remove"
+    )
+      throw new Error("The Personal Agent is not an editable application Bot.")
+    if (!("key" in command)) throw new Error("Unknown Bot command.")
+
+    return this.serial(personalBot, () => this.switch(personalBot, command))
+  }
+
+  private async ownUser(options?: { signal: AbortSignal }) {
+    this.own ??= (await this.member.profile.fetch(options)).member.public_id
+    return this.own
   }
 
   private async create(command: Extract<NexusBot.Command, { action: "bot.create" }>, agents: NamedAgent[]) {
@@ -286,21 +344,26 @@ export class Bots {
   }
 
   private async prepareInput(command: Extract<NexusBot.Command, { action: "bot.submit" }>, author: Client) {
+    const personal = command.id === personalBot
     const settings = await this.readSettings(command.id)
     const current = (await this.state(command.id).read())?.current
 
-    if (!current || current.public_id !== command.conversation || current.workspace_public_id !== command.workspace)
+    if (
+      !personal &&
+      (!current || current.public_id !== command.conversation || current.workspace_public_id !== command.workspace)
+    )
       throw new Error("Select this Bot's current conversation before submitting new input.")
 
     const chat = author.workspace(command.workspace).conversation(command.conversation)
     const info = await chat.fetch()
+    const answerer = personal ? await this.ownUser() : command.id
 
-    if (info.answering_user_public_id !== command.id || info.archived_at || info.side)
+    if (info.answering_user_public_id !== answerer || (!personal && info.archived_at) || info.side)
       throw new Error("This Bot conversation cannot receive input.")
     if (settings.audience === "external" && !command.speaker)
       throw new Error("External Bot inputs require their requester identity.")
 
-    const prepared = await this.prepare(settings, command.id)
+    const prepared = personal ? await this.presets.resolve(this.base()) : await this.prepare(settings, command.id)
     const previous =
       command.model === undefined
         ? await this.admissions.modelSelection(command.workspace, command.conversation)
@@ -316,7 +379,7 @@ export class Bots {
       expected_steering_run_public_id: command.expected_steering_run_public_id,
       text: command.text,
       ...(command.attachments ? { attachments: [...command.attachments] } : {}),
-      answering_user_public_id: command.id,
+      answering_user_public_id: answerer,
       ...(command.speaker ? { speaker_public_id: command.speaker } : {}),
       model: { model },
       model_selection: previous ?? {
@@ -364,6 +427,7 @@ export class Bots {
   private async readSettings(id: string) {
     const settings = await this.settingsDocument(id).read()
 
+    if (!settings && id === personalBot) return { ...personalSettings }
     if (!settings) throw new Error("This Bot has no saved application settings.")
     return settings
   }
@@ -450,10 +514,11 @@ export class Bots {
   }
 
   private async switch(
-    agent: NamedAgent,
+    id: string,
     command: Exclude<Extract<NexusBot.Command, { key: string }>, { action: "bot.submit" }>,
   ) {
-    const document = this.state(agent.public_id)
+    const personal = id === personalBot
+    const document = this.state(id)
     const request = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))(
       Object.fromEntries(Object.entries(command).filter(([key]) => key !== "key")),
     )
@@ -464,19 +529,26 @@ export class Bots {
     if (prior && (prior.action !== command.action || !isDeepStrictEqual(prior.request, request)))
       throw new Error("This operation key belongs to another Bot command.")
 
-    await this.recover(agent.public_id)
+    await this.recover(id)
 
     const state = (await document.read()) ?? { current: null, receipts: {} }
     const receipt = state.receipts[command.key]
 
     if (receipt) return { current: state.current, selected: receipt.selected, replayed: true }
 
-    const settings = await this.readSettings(agent.public_id)
+    const settings = await this.readSettings(id)
+    const answerer = personal ? await this.ownUser() : id
+    const audience = personal ? "owner" : settings.audience
     const pending: typeof Pending.Type = { key: command.key, action: command.action, request, previous: state.current }
     const selected =
       command.action === "bot.current" && state.current
         ? await this.member.workspace(state.current.workspace_public_id).conversation(state.current.public_id).fetch()
         : undefined
+    const home =
+      settings.home_workspace_public_id ??
+      (personal && (command.action === "bot.new" || command.action === "bot.current")
+        ? (await this.member.workspaces.list({ limit: 1 })).items[0]?.public_id
+        : undefined)
     const next: typeof Pending.Type =
       selected && !selected.archived_at
         ? { ...pending, selected: state.current! }
@@ -495,15 +567,19 @@ export class Bots {
             }
           : {
               ...pending,
-              workspace:
-                command.action === "bot.workspace"
-                  ? command.workspace
-                  : (settings.home_workspace_public_id ?? undefined),
+              workspace: command.action === "bot.workspace" ? command.workspace : home,
               ...(command.action === "bot.workspace" ? { home_workspace: command.workspace } : {}),
               create: {
-                answering_user_public_id: agent.public_id,
-                default_runner_executor_public_id: settings.audience === "external" ? null : this.runner,
-                metadata: { "opencode.bot": agent.public_id, "opencode.title_pending": true },
+                answering_user_public_id: answerer,
+                default_runner_executor_public_id: audience === "external" ? null : this.runner,
+                metadata: {
+                  "opencode.bot": id,
+                  "opencode.title_pending": true,
+                  ...(personal ? { "opencode.surface": "personal_desk" } : {}),
+                },
+                memory_context: Schema.decodeUnknownSync(
+                  Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)),
+                )(JSON.stringify(memoryContext({ audience }))),
               },
             }
 
@@ -523,8 +599,8 @@ export class Bots {
         .fetch()
 
       if (
-        conversation.answering_user_public_id !== agent.public_id ||
-        conversation.metadata["opencode.bot"] !== agent.public_id ||
+        conversation.answering_user_public_id !== answerer ||
+        conversation.metadata["opencode.bot"] !== id ||
         conversation.side
       )
         throw new Error("Choose a root conversation from this Bot's history.")
@@ -537,7 +613,7 @@ export class Bots {
         Object.entries(state.receipts).filter(([, row]) => row.completed_at > Date.now() - 86400000),
       ),
     }))
-    await this.recover(agent.public_id)
+    await this.recover(id)
 
     const completed = (await document.read())!
 
@@ -598,7 +674,7 @@ export class Bots {
 
     if (pending.home_workspace)
       await this.settingsDocument(id).change((current) => ({
-        ...current!,
+        ...(current ?? (id === personalBot ? { ...personalSettings } : current!)),
         home_workspace_public_id: pending.home_workspace!,
       }))
 

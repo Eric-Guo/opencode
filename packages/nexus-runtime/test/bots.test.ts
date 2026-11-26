@@ -183,6 +183,15 @@ test("Bot identities retain settings and recover switches without redirecting ac
 
     expect(first.replayed).toBe(false)
     expect(conversations.size).toBe(1)
+    expect(conversations.get(first.selected.public_id)?.memory_context).toEqual({
+      bindings: [
+        { name: "conversation", source: { scope: "conversation" }, access: "read_write" },
+        { name: "speaker", source: { scope: "speaker" }, access: "read_write" },
+        { name: "agent", source: { scope: "agent" }, access: "read_write" },
+        { name: "workspace", source: { scope: "workspace" }, access: "read_write" },
+      ],
+      mode: "index",
+    })
     fault.loseInput = true
     const input = {
       action: "bot.submit" as const,
@@ -223,6 +232,7 @@ test("Bot identities retain settings and recover switches without redirecting ac
     expect(conversations.get(first.selected.public_id)?.archived_at).toBeString()
     expect(calls.some((call) => call.endsWith("/cancel"))).toBe(false)
     expect(conversations.size).toBe(2)
+    await expect(reconnected.submit({ ...input, key: "non-current" })).rejects.toThrow("current conversation")
     await reconnected.submit(input)
     expect(inputs).toHaveLength(2)
     expect(inputs[1]).toEqual(inputs[0])
@@ -284,6 +294,14 @@ test("Bot identities retain settings and recover switches without redirecting ac
     const moved = await restarted.command(move)
 
     expect(moved).toMatchObject({ selected: { workspace_public_id: "workspace-next" }, replayed: true })
+    expect([...conversations.values()].find((row) => row.workspace_public_id === "workspace-next")?.memory_context).toEqual({
+      bindings: [
+        { name: "conversation", source: { scope: "conversation" }, access: "read_write" },
+        { name: "speaker", source: { scope: "speaker" }, access: "read_write" },
+        { name: "workspace", source: { scope: "workspace" }, access: "read" },
+      ],
+      mode: "index",
+    })
     expect(await restarted.command({ action: "bot.read", id })).toMatchObject({
       settings: { home_workspace_public_id: "workspace-next" },
       current: { workspace_public_id: "workspace-next" },
@@ -292,6 +310,197 @@ test("Bot identities retain settings and recover switches without redirecting ac
     await restarted.command(move)
     expect(conversations.size).toBe(3)
     await expect(restarted.command({ ...move, workspace: "other" })).rejects.toThrow("another Bot command")
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test("personal is a synthetic owner Bot without a profile agent row", async () => {
+  const conversations = new Map<string, JsonObject>()
+  const created: JsonObject[] = []
+  const inputs: JsonObject[] = []
+  const lists: Record<string, string>[] = []
+  const fixture = storeFixture(async (request) => {
+    const url = new URL(request.url)
+    const path = url.pathname
+
+    if (path.includes("/store_entries")) return
+
+    if (path.endsWith("/profile"))
+      return Response.json({
+        member: { public_id: "main", handle: "@main", kind: "agent", role: "member" },
+        credential: { plane: "member" },
+        measured_at: new Date().toISOString(),
+      })
+    if (path.endsWith("/profile/agents")) return Response.json({ agents: [] })
+    if (path.endsWith("/tools")) return Response.json({ tools: [] })
+    if (path.endsWith("/workspaces"))
+      return Response.json({
+        workspaces: [
+          {
+            public_id: "workspace",
+            name: "Home",
+            state: "active",
+            dedicated: false,
+            access_mode: "private",
+            lock_version: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            metadata: {},
+            tool_provider_overrides: {},
+            owner: { public_id: "human", display_name: "Human" },
+            creator: { public_id: "main", display_name: "Main", kind: "agent" },
+          },
+        ],
+        pagination: { next_after: null },
+      })
+    if (/\/workspaces\/[^/]+$/.test(path))
+      return Response.json({
+        workspace: {
+          public_id: path.split("/").at(-1),
+          name: "Home",
+          state: "active",
+          dedicated: false,
+          access_mode: "private",
+          lock_version: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          metadata: {},
+          tool_provider_overrides: {},
+          owner: { public_id: "human", display_name: "Human" },
+          creator: { public_id: "main", display_name: "Main", kind: "agent" },
+        },
+      })
+    if (path.endsWith("/conversations") && request.method === "GET") {
+      lists.push(Object.fromEntries(url.searchParams))
+      return Response.json({ conversations: [...conversations.values()], pagination: { next_after: null } })
+    }
+    if (path.endsWith("/conversations") && request.method === "POST") {
+      const input = (await request.json()) as { conversation: JsonObject }
+      const id = crypto.randomUUID()
+      const row = conversationFixture({
+        ...input.conversation,
+        public_id: id,
+        workspace_public_id: path.split("/").at(-2)!,
+      })
+
+      conversations.set(id, row)
+      created.push(input.conversation)
+      return Response.json({ conversation: row }, { status: 201 })
+    }
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      const input = (await request.json()) as { input: JsonObject }
+      inputs.push(input.input)
+      return Response.json({ input: inputFixture(input.input) }, { status: 202 })
+    }
+    const id = path.split("/").at(path.endsWith("/archive") || path.endsWith("/unarchive") ? -2 : -1)!
+    const conversation = conversations.get(id)
+
+    if (conversation) {
+      if (path.endsWith("/archive")) conversation.archived_at = new Date().toISOString()
+      if (path.endsWith("/unarchive")) conversation.archived_at = null
+      return Response.json({ conversation })
+    }
+
+    return Response.json({ error: { code: "not_found" } }, { status: 404 })
+  })
+  const bots = new Bots(
+    fixture.client,
+    new Presets(fixture.client),
+    () => ({ default_model: "provider/model" }),
+    "runner",
+  )
+
+  try {
+    expect(await bots.command({ action: "bot.read", id: "personal" })).toMatchObject({
+      public_id: "personal",
+      name: "personal",
+      handle: "personal",
+      display_name: "Personal Agent",
+      description: "Direct personal reach for the owner.",
+      configuration: { default_model: "provider/model" },
+      settings: { audience: "owner", home_workspace_public_id: null },
+      current: null,
+    })
+    await expect(bots.command({ action: "bot.remove", id: "personal" })).rejects.toThrow("Personal Agent")
+
+    const opened = (await bots.command({ action: "bot.current", id: "personal", key: "open" })) as {
+      selected: { public_id: string; workspace_public_id: string }
+    }
+
+    expect(opened.selected.workspace_public_id).toBe("workspace")
+    expect(created).toHaveLength(1)
+    expect(created[0]).toMatchObject({
+      answering_user_public_id: "main",
+      default_runner_executor_public_id: "runner",
+      metadata: { "opencode.bot": "personal", "opencode.surface": "personal_desk" },
+      memory_context: {
+        bindings: [
+          { name: "conversation", source: { scope: "conversation" }, access: "read_write" },
+          { name: "speaker", source: { scope: "speaker" }, access: "read_write" },
+          { name: "agent", source: { scope: "agent" }, access: "read_write" },
+          { name: "workspace", source: { scope: "workspace" }, access: "read_write" },
+        ],
+        mode: "index",
+      },
+    })
+
+    const earlier = crypto.randomUUID()
+
+    conversations.set(
+      earlier,
+      conversationFixture({
+        public_id: earlier,
+        answering_user_public_id: "main",
+        metadata: { "opencode.bot": "personal" },
+      }),
+    )
+    await bots.submit({
+      action: "bot.submit",
+      id: "personal",
+      workspace: "workspace",
+      conversation: earlier,
+      key: "direct",
+      text: "Hello",
+    })
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]).toMatchObject({
+      answering_user_public_id: "main",
+      model: { model: "provider/model" },
+      model_selection: { source: "default", model: "provider/model" },
+    })
+
+    await bots.command({ action: "bot.history", id: "personal" })
+    expect(lists.at(-1)).toMatchObject({
+      answering_user_public_id: "main",
+      metadata_key: "opencode.bot",
+      metadata_value: "personal",
+    })
+
+    const foreign = crypto.randomUUID()
+
+    conversations.set(
+      foreign,
+      conversationFixture({
+        public_id: foreign,
+        answering_user_public_id: "someone-else",
+        metadata: { "opencode.bot": "personal" },
+      }),
+    )
+    await expect(
+      bots.command({ action: "bot.resume", id: "personal", key: "foreign", workspace: "workspace", conversation: foreign }),
+    ).rejects.toThrow("root conversation")
+
+    const resumed = await bots.command({
+      action: "bot.resume",
+      id: "personal",
+      key: "resume",
+      workspace: "workspace",
+      conversation: earlier,
+    })
+
+    expect(resumed).toMatchObject({ selected: { public_id: earlier, workspace_public_id: "workspace" } })
+    expect(conversations.get(opened.selected.public_id)?.archived_at).toBeString()
   } finally {
     fixture.server.stop(true)
   }

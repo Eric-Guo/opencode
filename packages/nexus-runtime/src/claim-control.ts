@@ -1,5 +1,7 @@
 import {
   APIError,
+  CancelledError,
+  TransportError,
   type ClaimedTask,
   type ExecutorClient,
   type JsonObject,
@@ -14,6 +16,18 @@ type Task = ReturnType<ExecutorClient["inboxTask"]>
 export class ClaimDeadline extends Error {}
 
 export class ClaimInterrupted extends Error {}
+
+/** Transport, throttle and 5xx failures are worth retrying under a live claim; typed refusals and local cancellation are final. */
+export function transientControlError(error: unknown) {
+  if (error instanceof CancelledError) return false
+  return error instanceof TransportError || (error instanceof APIError && (error.status === 429 || error.status >= 500))
+}
+
+// The server's own count of the remaining park outranks deadline math on a skewed host clock.
+function grantedDeadline(claim: Pick<ClaimedTask, "deadline_at" | "remaining_ms">) {
+  if (typeof claim.remaining_ms === "number") return Date.now() + claim.remaining_ms
+  return claim.deadline_at ? Date.parse(claim.deadline_at) : undefined
+}
 
 /** One granted deadline, independently maintained while its handler waits on child work. */
 export class ClaimLease {
@@ -39,7 +53,7 @@ export class ClaimLease {
     private readonly extension = 3600000,
     private begun = true,
   ) {
-    this.deadline = claim.deadline_at ? Date.parse(claim.deadline_at) : Infinity
+    this.deadline = grantedDeadline(claim) ?? Infinity
     this.executionAt = this.deadline
     this.renewAt = renewable && begun ? Date.now() + Math.max(0, this.deadline - Date.now()) / 2 : Infinity
     this.signal = AbortSignal.any([parent, this.owner.signal])
@@ -99,17 +113,29 @@ export class ClaimLease {
 
     if (!this.renewable || !this.begun || this.executionSignal.aborted || Date.now() < this.renewAt) return
 
-    const grant = await this.task
+    const answer = await this.task
       .extend({ claim_token: this.claim.claim_token, timeout_ms: Math.min(this.extension, 3600000) }, { signal })
-      .catch(() => undefined)
+      .then(
+        (grant) => ({ grant }),
+        (error: unknown) => ({ error }),
+      )
 
-    if (!grant?.deadline_at) {
+    if ("error" in answer) {
+      // A transient refusal retries while the wait still fits before the clamp; a typed refusal ends the asking.
+      const wait = transientControlError(answer.error) ? Math.max(retryDelay(answer.error, 2000), 100) : 0
+      this.renewAt = wait > 0 && Date.now() + wait < this.executionAt ? Date.now() + wait : Infinity
+      return
+    }
+
+    const deadline = grantedDeadline(answer.grant)
+
+    if (deadline === undefined) {
       // A refused renewal does not revoke the deadline Nexus already granted.
       this.renewAt = Infinity
       return
     }
 
-    this.deadline = Date.parse(grant.deadline_at)
+    this.deadline = deadline
     this.renewAt = Date.now() + Math.max(0, this.deadline - Date.now()) / 2
     this.arm()
   }
@@ -165,18 +191,27 @@ export class OperationRefused extends Error {
 export type AcceptedOperation = { event: OperationEvent; outcome: Promise<JsonValue> }
 export type CodeOperation = (key: string, request: JsonObject) => Promise<AcceptedOperation>
 
+const OBSERVE_INITIAL_MS = 250
+const OBSERVE_MAX_MS = 2000
+
 /** One live invocation owns its receipts and observation cursor; source is never replayed. */
 export class ClaimOperations {
   private pending = new Map<string, ReturnType<typeof Promise.withResolvers<JsonValue>>>()
   private outcomes = new Map<string, OperationEvent>()
   private position = 0
   private reading?: Promise<void>
+  private wakeSignal = new AbortController()
 
   constructor(
     private readonly task: Task,
     private readonly token: string,
     private readonly signal: AbortSignal,
   ) {}
+
+  /** Non-blocking hint that an observation may be ready; one pending wake is enough. */
+  wake() {
+    this.wakeSignal.abort()
+  }
 
   async invoke(key: string, request: JsonObject) {
     return (await this.submit(key, request)).outcome
@@ -262,6 +297,7 @@ export class ClaimOperations {
   }
 
   private async read() {
+    let delay = OBSERVE_INITIAL_MS
     try {
       while (this.pending.size) {
         this.signal.throwIfAborted()
@@ -283,8 +319,15 @@ export class ClaimOperations {
           })
         if (!result) continue
         this.position = result.position
-        if (result.observation) this.deliver(result.observation)
-        else await scheduler.wait(250, { signal: this.signal })
+        if (result.observation) {
+          this.deliver(result.observation)
+          delay = OBSERVE_INITIAL_MS
+          continue
+        }
+        // A wake that landed during the read is spent: the read already saw the newest state.
+        this.wakeSignal = new AbortController()
+        await scheduler.wait(delay, { signal: AbortSignal.any([this.signal, this.wakeSignal.signal]) }).catch(() => {})
+        delay = Math.min(delay * 2, OBSERVE_MAX_MS)
       }
     } catch (error) {
       for (const pending of this.pending.values()) pending.reject(error)
@@ -293,12 +336,12 @@ export class ClaimOperations {
   }
 }
 
-function retryDelay(error: unknown) {
-  if (!(error instanceof APIError) || !error.retryAfter) return 1000
+function retryDelay(error: unknown, fallback = 1000) {
+  if (!(error instanceof APIError) || !error.retryAfter) return fallback
 
   const seconds = Number(error.retryAfter)
 
   return Number.isFinite(seconds)
     ? Math.max(0, seconds * 1000)
-    : Math.max(0, Date.parse(error.retryAfter) - Date.now()) || 1000
+    : Math.max(0, Date.parse(error.retryAfter) - Date.now()) || fallback
 }

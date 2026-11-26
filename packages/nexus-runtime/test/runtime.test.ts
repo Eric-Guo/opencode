@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NexusRuntime } from "../src/runtime"
+import { checkInPrefix } from "../src/routines"
 import { executorFixture } from "./fixture/executor"
 import { atomic } from "../src/storage"
 import { Schema } from "effect"
@@ -145,6 +146,9 @@ test.each([
     target: approval.target,
   })
   const scheduleWrites: JsonObject[] = []
+  const deskCreates: JsonObject[] = []
+  const speakerRequests: JsonObject[] = []
+  const profileEntries = new Map<string, StoreEntry>()
   const downloads = { bound: false, paths: [] as string[] }
   const policyTools: JsonObject[] = []
   const scheduledChat = { captured: false, pin: "" }
@@ -332,8 +336,71 @@ test.each([
             }),
           ),
         })
+      if (path === "/agent_api/v1/profile/ingress_speakers" && request.method === "POST") {
+        const body = (await request.json()) as { ingress_speaker: JsonObject }
+
+        speakerRequests.push(body.ingress_speaker)
+        return Response.json(
+          { ingress_speaker: { kind: "ingress", ...body.ingress_speaker, public_id: "owner" } },
+          { status: 201 },
+        )
+      }
+      if (path === "/agent_api/v1/workspaces/workspace/conversations" && request.method === "POST") {
+        const body = (await request.json()) as { conversation: JsonObject }
+
+        deskCreates.push(body.conversation)
+        return Response.json(
+          {
+            conversation: conversationFixture({
+              ...body.conversation,
+              public_id: "desk",
+              answering_user_public_id: "agent",
+            }),
+          },
+          { status: 201 },
+        )
+      }
+      if (path === "/agent_api/v1/workspaces/workspace/conversations/desk")
+        return Response.json({
+          conversation: conversationFixture({
+            public_id: "desk",
+            answering_user_public_id: "agent",
+            metadata: { "opencode.surface": "personal_desk", rho_bot_public_id: "personal" },
+          }),
+        })
+      if (path === "/agent_api/v1/profile/store_entries" && request.method === "POST") {
+        const body = (await request.json()) as { store_entry: { namespace: string; key: string; value: JsonObject } }
+        const entry: StoreEntry = {
+          ...body.store_entry,
+          public_id: "entry-" + body.store_entry.namespace,
+          lock_version: 0,
+          created_at: measured,
+          updated_at: measured,
+        }
+
+        profileEntries.set(entry.public_id, entry)
+        return Response.json({ store_entry: entry }, { status: 201 })
+      }
       if (path === "/agent_api/v1/profile/store_entries")
-        return Response.json({ store_entries: [preset], pagination: { next_after: null } })
+        return Response.json({
+          store_entries: [preset, ...profileEntries.values()],
+          pagination: { next_after: null },
+        })
+      if (path.startsWith("/agent_api/v1/profile/store_entries/") && !path.endsWith("/presets")) {
+        const id = path.split("/").at(-1)!
+        const entry = profileEntries.get(id)
+
+        if (!entry) return Response.json({ error: { code: "not_found" } }, { status: 404 })
+        if (request.method === "PATCH") {
+          const body = (await request.json()) as { store_entry: { value: JsonObject; lock_version: number } }
+
+          if (body.store_entry.lock_version !== entry.lock_version)
+            return Response.json({ error: { code: "stale_object" } }, { status: 409 })
+          entry.value = body.store_entry.value
+          entry.lock_version++
+        }
+        return Response.json({ store_entry: entry })
+      }
       if (path === "/agent_api/v1/profile/store_entries/presets") {
         if (request.method === "PATCH") {
           const body = Schema.decodeUnknownSync(
@@ -442,7 +509,11 @@ test.each([
         })
       if (path.endsWith("/schedules/job/executions"))
         return Response.json({ executions: [], pagination: { next_after: null, last_cursor: null } })
-      if (path.endsWith("/conversations/conversation/schedules") || path.endsWith("/schedules/job")) {
+      if (
+        path.endsWith("/conversations/conversation/schedules") ||
+        path.endsWith("/conversations/desk/schedules") ||
+        path.endsWith("/schedules/job")
+      ) {
         const body = Schema.decodeUnknownSync(
           Schema.Struct({ schedule: Schema.Record(Schema.String, Schema.MutableJson) }),
         )(await request.json())
@@ -452,7 +523,7 @@ test.each([
             schedule: {
               public_id: "job",
               workspace_public_id: "workspace",
-              conversation_public_id: "conversation",
+              conversation_public_id: path.includes("/conversations/desk/") ? "desk" : "conversation",
               prompt: "Review",
               wake: "auto",
               rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
@@ -573,6 +644,12 @@ test.each([
       expect(code?.description).toMatch(/instead of repeating\s+a successful tool call just to display it/)
       expect(runtime.status().identity).toMatchObject({ agent: "agent", workspace: "workspace" })
       expect(runtime.status().error).toBeUndefined()
+      expect(announcements.at(-1)?.services.agent?.tools.map((tool) => tool.name)).toEqual([
+        "channel_dispatch",
+        "propose_skill",
+        "list_extensions",
+        "manage_extension",
+      ])
       expect(await runtime.policy("workspace", "conversation")).toMatchObject({ tools: [], runner: null })
       if (transfer) await downloading.promise
       expect(runtime.status().executor).toMatchObject({
@@ -649,6 +726,7 @@ test.each([
           reasoning_enabled: false,
           fallback_models: ["provider/backup"],
           tool_names: ["read", "unavailable"],
+          wake: "passive",
           rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
         })
         await runtime.manage({
@@ -659,6 +737,7 @@ test.each([
           version: 0,
           prompt: "Review",
           model: "provider/updated",
+          wake: "auto",
           rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
         })
         await runtime.manage({
@@ -686,8 +765,10 @@ test.each([
           fallback_models: ["provider/backup"],
           tool_names: ["read"],
           approval_mode: "ask",
+          wake: "passive",
           executor_contexts: { runner: { "opencode.mcp": { anchor: null } } },
         })
+        expect(scheduleWrites[1]).toMatchObject({ expected_lock_version: 0, wake: "auto" })
         await runtime.manage({
           action: "schedule.update",
           workspace: "workspace",
@@ -733,6 +814,44 @@ test.each([
         scheduledChat.pin = ""
         policyTools.length = 0
         expect(calls.find((call) => call.path.endsWith("/schedules/job/executions"))?.after).toBe("next-execution")
+        await runtime.manage({
+          action: "routine.create",
+          workspace: "workspace",
+          key: "routine-create",
+          name: "Morning check",
+          what: "Check the inbox",
+          does: "check_in",
+          rule: { kind: "daily", local_time: "09:00", time_zone: "UTC" },
+        })
+        expect(speakerRequests).toEqual([{ channel_key: "rho:agent", external_id: "owner", display_name: "Owner" }])
+        expect(deskCreates).toHaveLength(1)
+        expect(deskCreates[0]).toMatchObject({
+          title: "Personal Desk",
+          metadata: { "opencode.surface": "personal_desk", rho_bot_public_id: "personal" },
+        })
+        expect(scheduleWrites.at(-1)).toMatchObject({
+          prompt: checkInPrefix + "Check the inbox",
+          wake: "passive",
+          name: "Morning check",
+          rule: { kind: "daily", local_time: "09:00", time_zone: "UTC" },
+          speaker_public_id: "owner",
+          answering_user_public_id: "agent",
+          approval_mode: "ask",
+        })
+        await runtime.manage({
+          action: "routine.create",
+          workspace: "workspace",
+          conversation: "conversation",
+          key: "routine-act",
+          what: "Summarize the day",
+          rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
+        })
+        expect(deskCreates).toHaveLength(1)
+        expect(scheduleWrites.at(-1)).toMatchObject({
+          prompt: "Summarize the day",
+          wake: "auto",
+          speaker_public_id: "owner",
+        })
         const memory = { action: "application.memory", conversation: "conversation", command: "ls" } as const
 
         expect(await runtime.manage(memory)).toBe("conversation/note.md (5 bytes)")

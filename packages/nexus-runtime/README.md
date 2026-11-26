@@ -215,8 +215,7 @@ using the existing session attachment contract. Its returned sets close with the
 owning registration. Initialization failure publishes none of the staged contributions;
 autonomous activities start after publication and stop when their owner retires.
 `restartOnly()` marks an active registration as requiring a service restart for
-configuration changes or disablement. Local native T3 ownership uses this facility;
-remote T3 connections remain replaceable.
+configuration changes or disablement.
 
 ## ACP editor surface
 
@@ -310,7 +309,7 @@ children. Service shutdown releases all children. Host-ended release and live pr
 
 The runtime now owns a surface-independent `NexusApplication`. Presets and Bot
 settings live in the paired Agent's Nexus Store, so they survive service restarts.
-First use seeds Probius and Adjutant plus the published worker, planner, explorer
+First use seeds Personal and Peer plus the published worker, planner, explorer
 and reviewer roles. Creating or duplicating a Preset does not publish a role.
 
 Use the existing management command or `POST /api/experimental/nexus/manage`:
@@ -591,7 +590,6 @@ hosted by OpenCode's managed service; the Rho web UI is replaced by `nexus-ui`.
 | rho-acp                   | Editor authentication, new/load/resume/configuration, history replay, questions/permissions, multimodal prompts, unsaved-buffer bridge and session MCP                                                                         |
 | rho-acp-client            | Resident conversation-owned children, fixed session placement, live progress, authentication/model selection, refusal floor, transcript capture and process retirement                                                         |
 | rho-ingress-telegram      | Connections/Bots, private/group/topic routing, requester ACLs, durable debounce/admission/delivery, media/voice, scheduling, participation and exact worker result tracking                                                    |
-| rho-t3                    | Native service setup, provider catalog and authentication, persistent assignment handles, uncertain launch reconciliation, fork isolation and callbacks                                                                        |
 | rho-dev                   | Source-only development extension and CLI over shared application operations                                                                                                                                                   |
 | rho-webui                 | Replaced by `packages/nexus-ui`                                                                                                                                                                                                |
 
@@ -616,14 +614,13 @@ use OpenCode's existing commands. The Rho WebUI is replaced by `nexus-ui`.
 | `rho-acp`              | editor sessions, auth, environment bridge and replay                                         | `editor`, `editor-replay`, `editor-permissions`, `editor-auth`, plus Nexus UI bridge reply tests                                                               |
 | `rho-acp-client`       | resident child delegation and permission policy                                              | `acp`, `adapters`, `runner-policy` tests                                                                                                                       |
 | `rho-ingress-telegram` | connections, ingress, scheduling and exact worker delivery                                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport` tests                                                            |
-| `rho-t3`               | authenticated RPC, native service and assignment ownership                                   | `t3` tests                                                                                                                                                     |
 | `rho-dev`              | source-only extension, streams and terminal                                                  | `dev`, `dev-worker` tests                                                                                                                                      |
 
 All named tests live under `test/` with `.test.ts` suffixes. Run `bun run
 test:conformance` with `OPENCODE_NEXUS_CHROMIUM` set to exercise the complete local
 suite without silently skipping browser or WebRTC checks. CI runs this gate on Linux
 when the runtime is affected. External integrations use local HTTP/WebSocket fixtures
-and real local processes; this gate makes no live Nexus, Telegram, or T3 account changes.
+and real local processes; this gate makes no live Nexus or Telegram account changes.
 
 ## Verification
 
