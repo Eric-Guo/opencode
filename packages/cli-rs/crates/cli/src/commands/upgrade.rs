@@ -57,10 +57,10 @@ mod tests {
         let rows: &[(&str, Option<&Path>, &str)] = &[
             ("0.0.0-native-12", Some(bundled), &preview),
             ("0.0.0-native-12", None, &preview),
-            ("2.4.0", Some(bundled), beside),
+            ("2.4.1", Some(bundled), beside),
             ("local", Some(bundled), beside),
             ("local", None, &source),
-            ("2.4.0", None, &none),
+            ("2.4.1", None, &none),
             ("0.0.0-native", None, &none),
         ];
         for (version, bundled, expected) in rows {
