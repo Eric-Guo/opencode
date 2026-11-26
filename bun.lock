@@ -622,7 +622,7 @@
       "version": "2.4.1",
       "dependencies": {
         "@agentclientprotocol/sdk": "1.6.0",
-        "@cybros/agent": "file:./vendor/cybros-agent-0.1.0-schedules.tgz",
+        "@cybros/agent": "file:./vendor/cybros-agent-0.1.0-superagent.tgz",
         "@opencode/codemode": "workspace:*",
         "@opencode/core": "workspace:*",
         "@opencode/protocol": "workspace:*",
@@ -655,7 +655,7 @@
       "name": "@opencode/nexus-ui",
       "version": "2.4.1",
       "dependencies": {
-        "@cybros/agent": "file:../nexus-runtime/vendor/cybros-agent-0.1.0-schedules.tgz",
+        "@cybros/agent": "file:../nexus-runtime/vendor/cybros-agent-0.1.0-superagent.tgz",
         "@opencode/client": "workspace:*",
         "@opencode/gui-plugins": "workspace:*",
         "@opencode/nexus-runtime": "workspace:*",
@@ -1674,7 +1674,7 @@
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 
-    "@cybros/agent": ["@cybros/agent@./vendor/cybros-agent-0.1.0-schedules.tgz", { "peerDependencies": { "ws": "^8.18.0" }, "optionalPeers": ["ws"] }, "sha512-r4oRcxiHiVr24pAwNvz5we1ttueTInfkDfnVrLPHD2HHPg/cES0ZBzng2NWmczExnAYoVzbmOpuIHP5y3iqvew=="],
+    "@cybros/agent": ["@cybros/agent@./vendor/cybros-agent-0.1.0-superagent.tgz", { "peerDependencies": { "ws": "^8.18.0" }, "optionalPeers": ["ws"] }, "sha512-5Sapn2MD3gnwTKfNedNh4eSRClaNHBWTH0hYLbdhpytXo/xVqCzN/0s3As7OP9nC0rSIYUDCzz0NVunWWQOLRg=="],
 
     "@dimforge/rapier3d-compat": ["@dimforge/rapier3d-compat@0.12.0", "", {}, "sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow=="],
 
@@ -4972,7 +4972,7 @@
 
     "@opencode/nexus-runtime/ws": ["ws@8.22.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="],
 
-    "@opencode/nexus-ui/@cybros/agent": ["@cybros/agent@../nexus-runtime/vendor/cybros-agent-0.1.0-schedules.tgz", { "peerDependencies": { "ws": "^8.18.0" }, "optionalPeers": ["ws"] }, "sha512-r4oRcxiHiVr24pAwNvz5we1ttueTInfkDfnVrLPHD2HHPg/cES0ZBzng2NWmczExnAYoVzbmOpuIHP5y3iqvew=="],
+    "@opencode/nexus-ui/@cybros/agent": ["@cybros/agent@../nexus-runtime/vendor/cybros-agent-0.1.0-superagent.tgz", { "peerDependencies": { "ws": "^8.18.0" }, "optionalPeers": ["ws"] }, "sha512-5Sapn2MD3gnwTKfNedNh4eSRClaNHBWTH0hYLbdhpytXo/xVqCzN/0s3As7OP9nC0rSIYUDCzz0NVunWWQOLRg=="],
 
     "@opencode/nexus-ui/ws": ["ws@8.22.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="],
 

@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { Schema } from "effect"
 import { toolAlias } from "@cybros/agent"
 import { StoreDocument } from "../src/document"
-import { Presets } from "../src/presets"
+import { guidance, Presets } from "../src/presets"
 import { readPreset, writePreset } from "../src/preset-document"
 import { storeFixture } from "./fixture/store"
 
@@ -163,8 +163,8 @@ test("Presets seed once, retain identity on replacement and export portable beha
     const catalog = await presets.catalog()
 
     expect(catalog.presets.map((row) => row.name)).toEqual([
-      "Probius",
-      "Adjutant",
+      "Personal",
+      "Peer",
       "worker",
       "planner",
       "explorer",
@@ -217,6 +217,80 @@ test("Presets seed once, retain identity on replacement and export portable beha
   } finally {
     fixture.server.stop(true)
   }
+})
+
+test("seeds describe the personal superagent, the scoped peer and generalized roles", async () => {
+  const fixture = storeFixture()
+  const presets = new Presets(fixture.client)
+
+  try {
+    const catalog = await presets.catalog()
+    const [personal, peer, worker, planner, explorer, reviewer] = catalog.presets
+
+    expect(personal).toMatchObject({
+      name: "Personal",
+      description: "Act as the owner's personal superagent across conversations, channels, memory, routines and environments.",
+      role: null,
+      configuration: { model_mode: "default" },
+    })
+    expect(personal.configuration.system_prompt).toContain("take as little of their attention as possible")
+    expect(personal.configuration.system_prompt).toContain("Ground recalls in your memory directory and session history.")
+    expect(peer).toMatchObject({
+      name: "Peer",
+      description: "Represent a scoped peer or channel bot for a specific audience, group or repository.",
+      role: null,
+      configuration: { model_mode: "default" },
+    })
+    expect(peer.configuration.system_prompt).toContain("hand back out-of-scope follow-ups rather than guessing authority")
+    expect(worker).toMatchObject({
+      description: "Carry out a bounded research, writing, operational or implementation task.",
+      role: {
+        name: "worker",
+        description: "Choose for ordinary execution of a bounded research, writing, operational or implementation task.",
+      },
+      configuration: { model_mode: "follow" },
+    })
+    expect(worker.configuration.system_prompt).toContain("Report the deliverable, verification evidence and any unresolved blocker to the delegator.")
+    expect(planner).toMatchObject({
+      description: "Turn a goal and constraints into a concrete, verifiable plan.",
+      role: {
+        name: "planner",
+        description: "Choose when requirements, dependencies or execution order need investigation before acting.",
+      },
+      configuration: { model_mode: "follow", runner_tool_names: ["read", "grep", "ls", "find", "web_fetch"] },
+    })
+    expect(planner.configuration.system_prompt).toContain("Cite the evidence behind assumptions.")
+    expect(explorer).toMatchObject({
+      description: "Inspect documents, web sources, codebases or environments and report grounded findings.",
+      role: {
+        name: "explorer",
+        description: "Choose for focused document, web, codebase or environment investigation and evidence gathering.",
+      },
+      configuration: { model_mode: "follow", runner_tool_names: ["read", "grep", "ls", "find", "web_fetch"] },
+    })
+    expect(explorer.configuration.system_prompt).toContain("Do not modify the material being inspected.")
+    expect(reviewer).toMatchObject({
+      description: "Assess supplied work or deliverables for concrete defects and missing verification.",
+      role: {
+        name: "reviewer",
+        description: "Choose to review a completed deliverable or change for defects, regressions and gaps in verification.",
+      },
+      configuration: { model_mode: "follow", runner_tool_names: ["read", "grep", "ls", "find", "bash", "web_fetch"] },
+    })
+    expect(reviewer.configuration.system_prompt).toContain("distinguish defects from preferences")
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test("shared guidance carries the attention doctrine and the run-declaration guideline", () => {
+  expect(guidance).toContain("Take as little human attention as possible, and give as much value as possible.")
+  expect(guidance).toContain("Speak proactively only for a brief acknowledgement, a ready deliverable, a direct answer, or one concrete blocking decision")
+  expect(guidance).toContain("hand it back once with a concise reason")
+  expect(guidance).toContain("Choose an environment when creating work that touches files, processes or a browser; pure personal, memory, research or coordination work needs no bound directory")
+  expect(guidance).toContain("draft it with `propose_skill` so they can review and publish it")
+  expect(guidance).toContain("out-of-scope follow-up handbacks with `channel_dispatch`")
+  expect(guidance).toContain("reading multiple documents, searching memory, fetching pages or running checks")
 })
 
 test("Preset compilation captures independent fallback and tool policies with conversation-only child memory", async () => {

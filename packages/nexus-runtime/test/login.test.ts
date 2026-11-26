@@ -84,3 +84,60 @@ test("PKCE login binds its state to the loopback callback and restores a separat
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test("concurrent Human verifications share one in-flight profile read and observe revocation immediately", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-login-coalesce-"))
+  let profiles = 0
+  let revoked = false
+  using nexus = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path === "/oauth/token")
+        return Response.json({
+          plane: "platform",
+          scope: "application",
+          user: { public_id: "human", display_name: "Human", role: "member" },
+          token_type: "Bearer",
+          refresh_token: "fixture-refresh",
+          access_token: "fixture-human",
+          expires_in: 3600,
+        })
+      if (path === "/api/v1/profile") {
+        profiles++
+        if (revoked) return Response.json({ error: { code: "unauthorized" } }, { status: 401 })
+        return Response.json({
+          member: { public_id: "human", role: "member", kind: "human" },
+          credential_plane: "platform",
+        })
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+  const login = new HumanLogin(directory)
+  try {
+    const authorization = new URL(await login.start(nexus.url.origin, "opencode.fixture"))
+    const callback = new URL(authorization.searchParams.get("redirect_uri")!)
+    callback.searchParams.set("state", authorization.searchParams.get("state")!)
+    callback.searchParams.set("code", "fixture-code")
+    expect((await fetch(callback)).status).toBe(200)
+
+    const accounts = await Promise.all(Array.from({ length: 5 }, () => login.account(nexus.url.origin)))
+    expect(accounts).toEqual(Array.from({ length: 5 }, () => ({ id: "human", role: "member" })))
+    expect(profiles).toBe(1)
+
+    revoked = true
+    const failures = await Promise.allSettled([login.account(nexus.url.origin), login.account(nexus.url.origin)])
+    expect(profiles).toBe(2)
+    for (const failure of failures) {
+      expect(failure.status).toBe("rejected")
+      expect((failure as PromiseRejectedResult).reason).toMatchObject({ status: 401 })
+    }
+    await expect(login.account(nexus.url.origin)).rejects.toMatchObject({ status: 401 })
+    expect(profiles).toBe(3)
+  } finally {
+    await login.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})

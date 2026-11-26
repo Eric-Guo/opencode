@@ -3968,11 +3968,31 @@ export type ExperimentalNexusManageInput = {
         readonly reasoning_enabled?: boolean | undefined
         readonly fallback_models?: ReadonlyArray<string> | undefined
         readonly tool_names?: ReadonlyArray<string> | undefined
+        readonly wake?: "auto" | "passive" | undefined
         readonly workspace?: string | undefined
         readonly approval?: "ask" | "rules" | "bypass" | undefined
         readonly conversation: string
         readonly key: string
         readonly prompt: string
+        readonly name?: string | undefined
+        readonly rule:
+          | { readonly kind: "once"; readonly run_at: string }
+          | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
+          | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+      }
+    | {
+        readonly action: "routine.create"
+        readonly model?: string | undefined
+        readonly reasoning_effort?: string | undefined
+        readonly reasoning_enabled?: boolean | undefined
+        readonly fallback_models?: ReadonlyArray<string> | undefined
+        readonly tool_names?: ReadonlyArray<string> | undefined
+        readonly workspace?: string | undefined
+        readonly conversation?: string | undefined
+        readonly approval?: "ask" | "rules" | "bypass" | undefined
+        readonly key?: string | undefined
+        readonly what: string
+        readonly does?: "act" | "check_in" | undefined
         readonly name?: string | undefined
         readonly rule:
           | { readonly kind: "once"; readonly run_at: string }
@@ -3999,6 +4019,7 @@ export type ExperimentalNexusManageInput = {
         readonly reasoning_enabled?: boolean | undefined
         readonly fallback_models?: ReadonlyArray<string> | undefined
         readonly tool_names?: ReadonlyArray<string> | undefined
+        readonly wake?: "auto" | "passive" | undefined
         readonly workspace?: string | undefined
         readonly conversation: string
         readonly id: string

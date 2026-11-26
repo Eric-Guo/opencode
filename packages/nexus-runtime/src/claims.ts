@@ -2,10 +2,11 @@ import { createHash } from "node:crypto"
 import { mkdir, readdir, readFile, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { Schema } from "effect"
-import { APIError, TransportError, type ExecutorClient } from "@cybros/agent"
+import { APIError, type ExecutorClient } from "@cybros/agent"
 import { setTimeout as delay } from "node:timers/promises"
 import { atomic } from "./storage"
 import { claimResult } from "./claim-result"
+import { transientControlError } from "./claim-control"
 
 const Record = Schema.Struct({
   run: Schema.String,
@@ -62,13 +63,7 @@ export class ClaimJournal {
           await this.remove(row)
           return
         }
-        if (
-          !(
-            error instanceof TransportError ||
-            (error instanceof APIError && (error.status === 429 || error.status >= 500))
-          )
-        )
-          throw error
+        if (!transientControlError(error)) throw error
 
         // A lost commit response may already have settled the claim. Never rerun the handler.
         const status = await task.claimStatus(row.token, { signal }).catch((cause: unknown) => {

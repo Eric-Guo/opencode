@@ -1,4 +1,5 @@
 import { setTimeout } from "node:timers/promises"
+import { transientControlError } from "./claim-control"
 
 /** Nexus drops faster frames with 202; keep the latest tail until its 250 ms cadence admits it. */
 export function claimProgress(post: (text: string) => Promise<void>, signal: AbortSignal) {
@@ -13,8 +14,9 @@ export function claimProgress(post: (text: string) => Promise<void>, signal: Abo
         () => {
           state.posted = text
         },
-        () => {
-          state.stopped = true
+        (error: unknown) => {
+          // A transient refusal costs this frame; the cadence retries the tail. A typed refusal ends the posting.
+          if (!transientControlError(error)) state.stopped = true
         },
       )
       state.next = Date.now() + 250

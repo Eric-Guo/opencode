@@ -38,7 +38,7 @@
   ],
   "dependencies": {
     "@agentclientprotocol/sdk": "1.6.0",
-    "@cybros/agent": "file:./vendor/cybros-agent-0.1.0-schedules.tgz",
+    "@cybros/agent": "file:./vendor/cybros-agent-0.1.0-superagent.tgz",
     "@opencode/codemode": "workspace:*",
     "@opencode/core": "workspace:*",
     "@opencode/protocol": "workspace:*",

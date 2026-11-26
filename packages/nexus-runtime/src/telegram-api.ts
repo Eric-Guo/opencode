@@ -12,6 +12,7 @@ export class TelegramError extends Error {
     readonly code: number,
     readonly retryAfter?: number,
     readonly notModified = false,
+    readonly description?: string,
   ) {
     super("Telegram request failed (" + code + ").")
   }
@@ -48,6 +49,7 @@ export class TelegramAPI {
         envelope.value.error_code ?? response.status,
         envelope.value.parameters?.retry_after,
         /not modified/i.test(envelope.value.description ?? ""),
+        envelope.value.description,
       )
     return envelope.value.result ?? null
   }

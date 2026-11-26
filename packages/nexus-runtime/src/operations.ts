@@ -13,17 +13,30 @@ import {
   type RequestOptions,
   type Step,
   type TurnPage,
+  type UpdateSchedule,
 } from "@cybros/agent"
 import { approvalGrant } from "./approval-grant"
 import { listTerminalRuns } from "./terminal-runs"
 import { SkillOperation, skillOperation } from "./operation-skills"
+import { Channels } from "./channels"
+import { Inbox } from "./inbox"
+import { preparePrompt, Routines, wakeForDoes } from "./routines"
+import { SkillDrafts } from "./skill-drafts"
+import { ownerSpeaker } from "./speakers"
+import { personalBot } from "./bots"
 import type { NexusApplication } from "./application"
 
+const Workspace = { workspace: Schema.optional(Schema.NonEmptyString) }
 const Conversation = {
   workspace: Schema.optional(Schema.NonEmptyString),
   conversation: Schema.NonEmptyString,
   addressed: Schema.optional(Schema.Boolean),
 }
+const ScheduleRule = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("once"), run_at: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("interval"), starts_at: Schema.String, every_seconds: Schema.Int }),
+  Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
+])
 const Run = {
   workspace: Schema.optional(Schema.NonEmptyString),
   run: Schema.NonEmptyString,
@@ -46,6 +59,165 @@ export const Operation = Schema.Union([
   Schema.Struct({ action: Schema.Literals(["identity", "rules"]) }),
   Schema.Struct({ action: Schema.Literal("followers"), side: Schema.optional(Schema.Boolean) }),
   Schema.Struct({ action: Schema.Literal("adaptations"), model: Schema.optional(Schema.String) }),
+  Schema.Struct({ action: Schema.Literal("personal_desk"), ...Workspace }),
+  Schema.Struct({ action: Schema.Literal("inbox"), ...Workspace }),
+  Schema.Struct({
+    action: Schema.Literal("inbox.snooze"),
+    ...Workspace,
+    conversation: Schema.NonEmptyString,
+    until_at: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({ action: Schema.Literal("inbox.done"), ...Workspace, conversation: Schema.NonEmptyString }),
+  Schema.Struct({
+    action: Schema.Literal("inbox.read"),
+    ...Workspace,
+    conversation: Schema.NonEmptyString,
+    activity_at: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({ action: Schema.Literal("channels"), ...Workspace }),
+  Schema.Struct({
+    action: Schema.Literal("channels.source"),
+    ...Workspace,
+    source_key: Schema.String,
+    name: Schema.String,
+    kind: Schema.optional(Schema.String),
+    enabled: Schema.optional(Schema.Boolean),
+    target: Schema.optional(Schema.String),
+    accept_mode: Schema.optional(Schema.String),
+    allowed_senders: Schema.optional(Schema.Array(Schema.String)),
+    allowed_bots: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  Schema.Struct({ action: Schema.Literal("channels.source.rm"), ...Workspace, source_key: Schema.String }),
+  Schema.Struct({
+    action: Schema.Literal("channels.attention"),
+    ...Workspace,
+    quiet_hours: Schema.optional(
+      Schema.Struct({
+        enabled: Schema.optional(Schema.Boolean),
+        start: Schema.optional(Schema.String),
+        end: Schema.optional(Schema.String),
+        time_zone: Schema.optional(Schema.String),
+      }),
+    ),
+    daily_proactive_limit: Schema.optional(Schema.Int),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("channels.ingest"),
+    ...Workspace,
+    source_key: Schema.String,
+    external_id: Schema.String,
+    thread_key: Schema.String,
+    text: Schema.String,
+    actor_id: Schema.optional(Schema.String),
+    actor_kind: Schema.optional(Schema.String),
+    addressed: Schema.optional(Schema.Boolean),
+    delivery_mode: Schema.optional(Schema.Literals(["steer", "steer_now", "queue"])),
+    payload: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
+    model: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("channels.outbox.enqueue"),
+    ...Workspace,
+    channel_key: Schema.String,
+    thread_key: Schema.String,
+    body: Schema.String,
+    purpose: Schema.optional(Schema.String),
+    conversation: Schema.optional(Schema.NonEmptyString),
+    proactive: Schema.optional(Schema.Boolean),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
+    idempotency_key: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("channels.outbox.drain"),
+    ...Workspace,
+    channel_key: Schema.optional(Schema.String),
+    limit: Schema.optional(Schema.Int),
+    lease_seconds: Schema.optional(Schema.Int),
+  }),
+  Schema.Struct({ action: Schema.Literal("subscriptions"), ...Conversation }),
+  Schema.Struct({
+    action: Schema.Literal("subscriptions.create"),
+    ...Conversation,
+    source_key: Schema.String,
+    thread_key: Schema.String,
+    mode: Schema.optional(Schema.Literals(["active", "context_only"])),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("subscriptions.rm"),
+    ...Conversation,
+    subscription: Schema.optional(Schema.NonEmptyString),
+    source_key: Schema.optional(Schema.String),
+    thread_key: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("triggers.handback"),
+    ...Workspace,
+    trigger: Schema.optional(Schema.String),
+    external_id: Schema.optional(Schema.String),
+    source_key: Schema.optional(Schema.String),
+    thread_key: Schema.optional(Schema.String),
+    conversation: Schema.optional(Schema.NonEmptyString),
+    reason: Schema.String,
+    router: Schema.optional(Schema.NonEmptyString),
+    model: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({ action: Schema.Literal("routines"), ...Workspace }),
+  Schema.Struct({
+    action: Schema.Literal("routines.create"),
+    ...Workspace,
+    kind: Schema.Literal("event"),
+    name: Schema.String,
+    source_key: Schema.String,
+    instructions: Schema.optional(Schema.String),
+    what: Schema.optional(Schema.String),
+    pattern: Schema.optional(Schema.String),
+    does: Schema.optional(Schema.String),
+    enabled: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("routines.update"),
+    ...Workspace,
+    kind: Schema.Literals(["event", "time"]),
+    public_id: Schema.NonEmptyString,
+    conversation: Schema.optional(Schema.NonEmptyString),
+    expected_lock_version: Schema.optional(Schema.Int),
+    name: Schema.optional(Schema.String),
+    source_key: Schema.optional(Schema.String),
+    instructions: Schema.optional(Schema.String),
+    what: Schema.optional(Schema.String),
+    prompt: Schema.optional(Schema.String),
+    pattern: Schema.optional(Schema.String),
+    does: Schema.optional(Schema.String),
+    enabled: Schema.optional(Schema.Boolean),
+    rule: Schema.optional(ScheduleRule),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("routines.toggle"),
+    ...Workspace,
+    kind: Schema.Literals(["event", "time"]),
+    public_id: Schema.NonEmptyString,
+    conversation: Schema.optional(Schema.NonEmptyString),
+    enabled: Schema.Boolean,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("routines.rm"),
+    ...Workspace,
+    kind: Schema.Literals(["event", "time"]),
+    public_id: Schema.NonEmptyString,
+    conversation: Schema.optional(Schema.NonEmptyString),
+  }),
+  Schema.Struct({ action: Schema.Literal("skills.drafts") }),
+  Schema.Struct({
+    action: Schema.Literal("skills.drafts.propose"),
+    ...Workspace,
+    name: Schema.String,
+    scope: Schema.String,
+    description: Schema.String,
+    content: Schema.String,
+    conversation: Schema.optional(Schema.NonEmptyString),
+  }),
+  Schema.Struct({ action: Schema.Literal("skills.drafts.approve"), ...Workspace, public_id: Schema.NonEmptyString }),
+  Schema.Struct({ action: Schema.Literal("skills.drafts.dismiss"), public_id: Schema.NonEmptyString }),
   Schema.Struct({
     action: Schema.Literal("target"),
     workspace: Schema.optional(Schema.NonEmptyString),
@@ -168,6 +340,7 @@ export const Operation = Schema.Union([
     after_position: Schema.optional(Schema.Int),
     before_position: Schema.optional(Schema.Int),
     limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
+    include_tool_outputs: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
     action: Schema.Literal("turns"),
@@ -342,6 +515,22 @@ export class Operations {
     private readonly identity: { workspace: string; agent: string; runner: string },
   ) {}
 
+  private get channels() {
+    return new Channels(this.member.profile.storeEntries)
+  }
+
+  private get inbox() {
+    return new Inbox(this.member.profile.storeEntries, undefined, async () => (await this.skillDrafts.list()).length)
+  }
+
+  private get routines() {
+    return new Routines(this.channels)
+  }
+
+  private get skillDrafts() {
+    return new SkillDrafts(this.member.profile.storeEntries)
+  }
+
   async runs(input: typeof RunsOperation.Type, followed: readonly string[], options: RequestOptions) {
     const page = await this.member
       .workspace(this.identity.workspace)
@@ -375,6 +564,29 @@ export class Operations {
       failure_reason: run.failure_reason,
       until: this.application.until.progress(workspace, run),
     }
+  }
+
+  private async activeRuns(options: RequestOptions) {
+    const runs: Record<string, { run_public_id: string; status: string }> = {}
+
+    await Promise.all(
+      this.application.lifecycle.hostsSnapshot().map(async (host) => {
+        const space = this.member.workspace(host.workspace)
+        const info = await space.conversation(host.conversation).fetch(options)
+
+        if (!info.active_turn_public_id) return
+
+        const turn = await space.conversation(host.conversation).turns.fetch(info.active_turn_public_id, {}, options)
+        const run = (turn.running_variant ?? turn.active_variant)?.run_public_id
+
+        if (!run) return
+        runs[host.conversation] = {
+          run_public_id: run,
+          status: (await this.followerRun(host.workspace, run, options)).status,
+        }
+      }),
+    )
+    return runs
   }
 
   async command(value: unknown, options: RequestOptions = {}) {
@@ -581,6 +793,265 @@ export class Operations {
     }
     if (input.action === "runs") return this.runs(input, [], options)
 
+    if (input.action === "personal_desk")
+      return {
+        conversation: await this.channels.ensurePersonalDesk({
+          client: this.member,
+          workspace_public_id: selected,
+          owner_speaker_public_id: await ownerSpeaker(this.member, this.identity.agent, options),
+        }),
+      }
+    if (input.action === "inbox") {
+      const [overview, activeRuns] = await Promise.all([this.channels.overview(), this.activeRuns(options)])
+
+      return {
+        inbox: await this.inbox.partition({
+          client: this.member,
+          workspace_public_id: selected,
+          active_runs: activeRuns,
+          desk_public_id: overview.desks[selected],
+        }),
+      }
+    }
+    if (input.action === "inbox.snooze")
+      return {
+        inbox_entry: await this.inbox.snooze({
+          workspace_public_id: selected,
+          conversation_public_id: input.conversation,
+          until_at: input.until_at,
+        }),
+      }
+    if (input.action === "inbox.done")
+      return this.inbox.complete({
+        client: this.member,
+        workspace_public_id: selected,
+        conversation_public_id: input.conversation,
+      })
+    if (input.action === "inbox.read")
+      return {
+        inbox_entry: await this.inbox.markRead({
+          workspace_public_id: selected,
+          conversation_public_id: input.conversation,
+          activity_at: input.activity_at,
+        }),
+      }
+    if (input.action === "channels") {
+      const [overview, outbox] = await Promise.all([
+        this.channels.overview(),
+        workspace.outboxMessages.list({ limit: 30 }, options),
+      ])
+
+      return { channels: { ...overview, outbox_messages: outbox } }
+    }
+    if (input.action === "channels.source") return { source: await this.channels.upsertSource(input) }
+    if (input.action === "channels.source.rm") return { removed: await this.channels.removeSource(input.source_key) }
+    if (input.action === "channels.attention")
+      return { attention_policy: await this.channels.updateAttentionPolicy(input) }
+    if (input.action === "channels.ingest")
+      return this.channels.ingest({
+        client: this.member,
+        workspace_public_id: selected,
+        source_key: input.source_key,
+        external_id: input.external_id,
+        thread_key: input.thread_key,
+        text: input.text,
+        actor_id: input.actor_id,
+        actor_kind: input.actor_kind,
+        addressed: input.addressed,
+        delivery_mode: input.delivery_mode,
+        payload: input.payload,
+        model: input.model ?? (await this.application.prepare()).model ?? undefined,
+        owner_speaker_public_id: await ownerSpeaker(this.member, this.identity.agent, options),
+      })
+    if (input.action === "channels.outbox.enqueue")
+      return this.channels.enqueueReply({
+        client: this.member,
+        workspace_public_id: selected,
+        channel_key: input.channel_key,
+        thread_key: input.thread_key,
+        body: input.body,
+        purpose: input.purpose,
+        conversation_public_id: input.conversation,
+        proactive: input.proactive,
+        metadata: input.metadata,
+        idempotency_key: input.idempotency_key,
+      })
+    if (input.action === "channels.outbox.drain")
+      return {
+        settlements: await this.channels.drainOutbox({
+          client: this.member,
+          workspace_public_id: selected,
+          channel_key: input.channel_key,
+          limit: input.limit,
+          lease_seconds: input.lease_seconds,
+        }),
+      }
+    if (input.action === "subscriptions")
+      return { thread_subscriptions: await workspace.conversation(input.conversation).threadSubscriptions.list(options) }
+    if (input.action === "subscriptions.create")
+      return {
+        thread_subscription: await workspace
+          .conversation(input.conversation)
+          .threadSubscriptions.create(
+            { source_key: input.source_key, thread_key: input.thread_key, mode: input.mode ?? "active" },
+            options,
+          ),
+      }
+    if (input.action === "subscriptions.rm") {
+      const door = workspace.conversation(input.conversation).threadSubscriptions
+      const subscription =
+        input.subscription ??
+        (await door.list(options)).find(
+          (row) => row.source_key === input.source_key && row.thread_key === input.thread_key,
+        )?.public_id
+
+      if (!subscription) throw new Error("No matching thread subscription")
+      await door.delete(subscription, options)
+      return { deleted: { public_id: subscription } }
+    }
+    if (input.action === "triggers.handback") {
+      const reason = input.reason.trim()
+      const trigger = await this.channels.resolveTriggerPublicId({
+        trigger_public_id: input.trigger,
+        source_key: input.source_key,
+        thread_key: input.thread_key,
+        external_id: input.external_id,
+      })
+
+      if (!trigger || reason === "")
+        throw new Error("trigger_public_id (or external_id/source_key+thread_key) and reason are required")
+
+      const desk = await this.channels.ensurePersonalDesk({
+        client: this.member,
+        workspace_public_id: selected,
+        owner_speaker_public_id: await ownerSpeaker(this.member, this.identity.agent, options),
+      })
+
+      return {
+        handback: await workspace.triggers.handback(
+          trigger,
+          {
+            conversation_public_id: input.conversation ?? desk.public_id,
+            reason,
+            router_conversation_public_id: input.router ?? desk.public_id,
+            model: input.model ?? (await this.application.prepare()).model ?? undefined,
+          },
+          options,
+        ),
+      }
+    }
+    if (input.action === "routines") return this.routines.list({ client: this.member, workspace_public_id: selected })
+    if (input.action === "routines.create") {
+      const created = await this.channels.createEventRoutine({
+        name: input.name,
+        source_key: input.source_key,
+        instructions: input.what ?? input.instructions ?? "",
+        pattern: input.pattern,
+        does: input.does,
+        enabled: input.enabled,
+      })
+
+      return { routine: { ...created, kind: "event" } }
+    }
+    if (input.action === "routines.update") {
+      if (input.kind === "event") {
+        const updated = await this.channels.updateEventRoutine(input.public_id, {
+          name: input.name,
+          source_key: input.source_key,
+          pattern: input.pattern,
+          instructions: input.what ?? input.instructions,
+          does: input.does,
+          enabled: input.enabled,
+        })
+
+        return { routine: { ...updated, kind: "event" } }
+      }
+      if (!input.conversation) throw new Error("Missing conversation_public_id")
+      if (input.expected_lock_version === undefined) throw new Error("Missing expected_lock_version")
+
+      const update: UpdateSchedule = { expected_lock_version: input.expected_lock_version }
+      const what = input.what ?? input.prompt
+
+      if (input.name !== undefined) update.name = input.name
+      if (what !== undefined) update.prompt = preparePrompt(what, input.does ?? "act")
+      if (input.rule !== undefined) update.rule = input.rule
+      if (input.does !== undefined) update.wake = wakeForDoes(input.does)
+
+      return {
+        routine: {
+          ...(await workspace.conversation(input.conversation).schedules.update(input.public_id, update, options)),
+          kind: "time",
+        },
+      }
+    }
+    if (input.action === "routines.toggle") {
+      if (input.kind === "event") {
+        const updated = await this.channels.updateEventRoutine(input.public_id, { enabled: input.enabled })
+
+        return { routine: { ...updated, kind: "event" } }
+      }
+      if (!input.conversation) throw new Error("Missing conversation_public_id")
+
+      const schedules = workspace.conversation(input.conversation).schedules
+      const row = input.enabled
+        ? await schedules.resume(input.public_id, options)
+        : await schedules.pause(input.public_id, options)
+
+      return { routine: { ...row, kind: "time" } }
+    }
+    if (input.action === "routines.rm") {
+      if (input.kind === "event") return { removed: await this.channels.removeEventRoutine(input.public_id) }
+      if (!input.conversation) throw new Error("Missing conversation_public_id")
+
+      const row = await workspace.conversation(input.conversation).schedules.cancel(input.public_id, options)
+
+      return { routine: { ...row, kind: "time" } }
+    }
+    if (input.action === "skills.drafts") return { skill_drafts: await this.skillDrafts.list() }
+    if (input.action === "skills.drafts.propose")
+      return {
+        skill_draft: await this.skillDrafts.propose({
+          name: input.name,
+          scope: input.scope,
+          description: input.description,
+          content: input.content,
+          conversation_public_id: input.conversation,
+          workspace_public_id: selected,
+        }),
+      }
+    if (input.action === "skills.drafts.approve") {
+      const drafts = this.skillDrafts
+      const draft = await drafts.fetch(input.public_id)
+      const target = input.workspace ?? draft.workspace_public_id ?? selected
+      const owner = draft.scope === "agent" ? this.member.profile : this.member.workspace(target)
+      const collection = (await owner.memoryCollections.list({ default: true }, options)).items[0]
+
+      if (!collection)
+        throw new Error("memory_scope_unavailable: The target " + draft.scope + " memory collection is unavailable")
+
+      const documents = this.member.memoryCollections.documents(collection.public_id)
+      const path = "skills/" + draft.name
+      const existing = (await documents.list(options)).find((row) => row.path === path)
+      const written = await documents.write(
+        {
+          path,
+          content: draft.content,
+          description: draft.description,
+          expected_public_id: existing?.public_id ?? null,
+          expected_lock_version: existing?.lock_version ?? null,
+        },
+        options,
+      )
+
+      await drafts.remove(draft.public_id)
+      return { memory: written, approved_draft_public_id: draft.public_id }
+    }
+    if (input.action === "skills.drafts.dismiss") {
+      const removed = await this.skillDrafts.remove(input.public_id)
+
+      return { dismissed: { public_id: removed.public_id, name: removed.name, scope: removed.scope } }
+    }
+
     if (input.action === "side")
       return this.application.openSide(
         { key: input.key, parent: input.conversation, workspace: selected, tools: input.tools },
@@ -691,6 +1162,7 @@ export class Operations {
             before_position: input.before_position,
             limit: input.limit,
             include_execution: true,
+            include_tool_outputs: input.include_tool_outputs,
           },
           options,
         )
@@ -732,7 +1204,8 @@ export class Operations {
         const environments = this.application.environments
         const restoreGuard = environments.restoreGuard.bind(environments)
         if (input.action === "rewind") {
-          if (info.metadata["opencode.bot"])
+          const bot = info.metadata["opencode.bot"]
+          if (bot && bot !== personalBot)
             throw new Error("bot_conversation_required: fork through the Bot's history using bot.fork.")
           await environments.assertHistoryIdle(selected, info)
           return chat.rewind(

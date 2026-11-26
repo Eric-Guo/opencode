@@ -1,4 +1,5 @@
 import { executionSnapshot } from "./execution"
+import { memoryContext } from "./speakers"
 import { readFile } from "node:fs/promises"
 import { setTimeout as delay } from "node:timers/promises"
 import { createHash } from "node:crypto"
@@ -137,6 +138,7 @@ export async function telegram(
                   answering_user_public_id: options.agent,
                   default_runner_executor_public_id: options.runner,
                   metadata: { "opencode.surface": "telegram" },
+                  memory_context: memoryContext(),
                 },
                 { idempotencyKey: key("chat", id), signal },
               )

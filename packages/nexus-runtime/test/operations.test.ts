@@ -127,6 +127,7 @@ test("terminal runs capture placement, ask for approval and return before the sh
     if (path.endsWith("/runs") && request.method === "GET") {
       expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
         kind: "standalone",
+        tool_name: "terminal",
         order: "desc",
         after: "cursor",
         limit: "20",
@@ -271,6 +272,42 @@ test("terminal runs capture placement, ask for approval and return before the sh
     await expect(
       application.operations.command({ action: "terminal.realtime", ...target, run: "not-terminal" }),
     ).rejects.toThrow("Unknown terminal task")
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test("history forwards include_tool_outputs alongside the execution details it implies", async () => {
+  const queries: Record<string, string>[] = []
+  const fixture = storeFixture(async (request) => {
+    const url = new URL(request.url)
+
+    if (url.pathname.endsWith("/conversations/conversation"))
+      return Response.json({ conversation: conversationFixture() })
+    if (url.pathname.endsWith("/conversations/conversation/history")) {
+      queries.push(Object.fromEntries(url.searchParams))
+      return Response.json({
+        conversation: { public_id: "conversation", title: null },
+        turns: [],
+        pagination: { before_position: null, after_position: null, has_older: false, has_newer: false },
+        truncated: false,
+        execution: null,
+      })
+    }
+  })
+  const app = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+
+  try {
+    await app.operations.command({ action: "history", conversation: "conversation", include_tool_outputs: true })
+    await app.operations.command({ action: "history", conversation: "conversation" })
+    expect(queries).toEqual([
+      { include_execution: "true", include_tool_outputs: "true" },
+      { include_execution: "true" },
+    ])
   } finally {
     fixture.server.stop(true)
   }
@@ -435,6 +472,14 @@ test("rewind refuses a Bot and fresh history mutations refuse an active turn bef
   const fixture = storeFixture((request) => {
     const path = new URL(request.url).pathname
     if (request.method !== "GET") writes.push(path)
+    if (path.endsWith("/conversations/conversation/forks"))
+      return Response.json(
+        {
+          conversation: conversationFixture({ public_id: "forked" }),
+          runner_effects: { status: "untouched", runners: [] },
+        },
+        { status: 201 },
+      )
     if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: info })
     if (path.endsWith("/regeneration_receipt")) return Response.json({ error: { code: "not_found" } }, { status: 404 })
     return Response.json({ error: { code: "unexpected_request" } }, { status: 400 })
@@ -447,11 +492,14 @@ test("rewind refuses a Bot and fresh history mutations refuse an active turn bef
   const rewind = { action: "rewind", conversation: "conversation", turn: "turn", key: "rewind", restore: false }
   try {
     await expect(app.operations.command(rewind)).rejects.toThrow("bot_conversation_required")
+    info.metadata = { "opencode.bot": "personal" }
+    await app.operations.command(rewind)
+    expect(writes).toEqual(["/agent_api/v1/workspaces/workspace/conversations/conversation/forks"])
     info.metadata = {}
     info.active_turn_public_id = "running"
     await expect(app.operations.command(rewind)).rejects.toThrow("conversation_busy")
     await expect(app.operations.command({ ...rewind, action: "regenerate" })).rejects.toThrow("conversation_busy")
-    expect(writes).toEqual([])
+    expect(writes).toHaveLength(1)
   } finally {
     fixture.server.stop(true)
   }

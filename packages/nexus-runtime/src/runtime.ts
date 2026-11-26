@@ -16,6 +16,7 @@ import {
   type CredentialStore,
   type JsonObject,
   type RequestOptions,
+  type ScheduleRuleInput,
 } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { createHash } from "node:crypto"
@@ -58,6 +59,9 @@ import type { ApprovalGrant } from "./approval-grant"
 import { HumanLogin } from "./login"
 import { NexusApplication } from "./application"
 import { Operations } from "./operations"
+import { Channels } from "./channels"
+import { preparePrompt, wakeForDoes } from "./routines"
+import { ownerSpeaker } from "./speakers"
 import { conversationMemory } from "./memory-commands"
 export { NexusApplication } from "./application"
 import type { NexusPreset } from "@opencode/schema/nexus-preset"
@@ -1468,6 +1472,50 @@ export class NexusRuntime {
     const selected =
       "workspace" in command ? (command.workspace ?? active.identity.workspace) : active.identity.workspace
     const workspace = member.workspace(selected)
+    if (command.action === "routine.create") {
+      const owner = await ownerSpeaker(member, active.identity.agent)
+      const conversation =
+        command.conversation ??
+        (
+          await new Channels(member.profile.storeEntries).ensurePersonalDesk({
+            client: member,
+            workspace_public_id: selected,
+            owner_speaker_public_id: owner,
+          })
+        ).public_id
+      const does = command.does ?? "act"
+
+      return this.createSchedule(member, active, selected, {
+        conversation,
+        key: command.key ?? crypto.randomUUID(),
+        prompt: preparePrompt(command.what, does),
+        name: command.name,
+        rule: command.rule,
+        model: command.model,
+        reasoning_effort: command.reasoning_effort,
+        reasoning_enabled: command.reasoning_enabled,
+        fallback_models: command.fallback_models,
+        tool_names: command.tool_names,
+        approval: command.approval,
+        wake: wakeForDoes(does),
+        speaker: owner,
+      })
+    }
+    if (command.action === "schedule.create")
+      return this.createSchedule(member, active, selected, {
+        conversation: command.conversation,
+        key: command.key,
+        prompt: command.prompt,
+        name: command.name,
+        rule: command.rule,
+        model: command.model,
+        reasoning_effort: command.reasoning_effort,
+        reasoning_enabled: command.reasoning_enabled,
+        fallback_models: command.fallback_models,
+        tool_names: command.tool_names,
+        approval: command.approval,
+        wake: command.wake,
+      })
     if (command.action === "schedule.list")
       return command.conversation
         ? workspace.conversation(command.conversation).schedules.list({ after: command.after })
@@ -1492,35 +1540,6 @@ export class NexusRuntime {
 
         return { model: selection?.model ?? null, approval: mode === "rules" || mode === "bypass" ? mode : "ask" }
       }
-      if (command.action === "schedule.create") {
-        const policy = await this.policy(selected, command.conversation, undefined, undefined, info)
-        const selection =
-          info.agent_configuration_present && !command.model
-            ? undefined
-            : await active.application.selectModel(selected, info, command.model, policy.model)
-        const requested = command.tool_names
-        return (
-          await schedules.create(
-            {
-              prompt: command.prompt,
-              name: command.name,
-              rule: command.rule,
-              model: scheduleModel(command, selection?.model),
-              model_selection: selection,
-              fallback_models: command.fallback_models
-                ? [...command.fallback_models]
-                : info.agent_configuration_present
-                  ? undefined
-                  : policy.fallback_models,
-              answering_user_public_id: active.identity.agent,
-              approval_mode: command.approval ?? "ask",
-              tool_names: requested ? policy.tools.filter((name) => requested.includes(name)) : policy.tools,
-              executor_contexts: policy.executor_contexts,
-            },
-            { idempotencyKey: command.key },
-          )
-        ).schedule
-      }
       if (!("id" in command)) throw new Error("Unknown conversation command.")
       if (command.action === "schedule.update") {
         const requested = command.tool_names
@@ -1536,6 +1555,7 @@ export class NexusRuntime {
           fallback_models: command.fallback_models && [...command.fallback_models],
           tool_names: tools,
           approval_mode: command.approval,
+          wake: command.wake,
           rule: command.rule,
           prompt: command.prompt,
         })
@@ -1573,6 +1593,63 @@ export class NexusRuntime {
       return null
     }
     throw new Error("Memory reads require a path and searches require a pattern.")
+  }
+
+  private async createSchedule(
+    member: Client,
+    active: Connection,
+    selected: string,
+    input: {
+      conversation: string
+      key: string
+      prompt: string
+      name?: string
+      rule: ScheduleRuleInput
+      model?: string
+      reasoning_effort?: string
+      reasoning_enabled?: boolean
+      fallback_models?: readonly string[]
+      tool_names?: readonly string[]
+      approval?: "ask" | "rules" | "bypass"
+      wake?: "auto" | "passive"
+      speaker?: string
+    },
+  ) {
+    const chat = member.workspace(selected).conversation(input.conversation)
+    const info = await chat.fetch()
+    if (info.side || info.archived_at || info.answering_user_public_id !== active.identity.agent)
+      throw new Error("Unknown active agent conversation.")
+
+    const policy = await this.policy(selected, input.conversation, undefined, undefined, info)
+    const selection =
+      info.agent_configuration_present && !input.model
+        ? undefined
+        : await active.application.selectModel(selected, info, input.model, policy.model)
+    const requested = input.tool_names
+
+    return (
+      await chat.schedules.create(
+        {
+          prompt: input.prompt,
+          name: input.name,
+          rule: input.rule,
+          model: scheduleModel(input, selection?.model),
+          model_selection: selection,
+          fallback_models: input.fallback_models
+            ? [...input.fallback_models]
+            : info.agent_configuration_present
+              ? undefined
+              : policy.fallback_models,
+          answering_user_public_id: active.identity.agent,
+          ...(input.speaker ? { speaker_public_id: input.speaker } : {}),
+          approval_mode: input.approval ?? "ask",
+          wake: input.wake,
+          tool_names: requested ? policy.tools.filter((name) => requested.includes(name)) : policy.tools,
+          executor_contexts: policy.executor_contexts,
+        },
+        { idempotencyKey: input.key },
+      )
+    ).schedule
   }
 
   async catalog(kind: "schedules" | "memory" | "mcp", after?: string) {
@@ -1746,7 +1823,7 @@ export class NexusRuntime {
 }
 
 function scheduleModel(
-  command: Extract<typeof NexusCommand.Type, { action: "schedule.create" | "schedule.update" }>,
+  command: { model?: string; reasoning_effort?: string; reasoning_enabled?: boolean },
   model: string | undefined,
 ) {
   if (model || command.reasoning_effort !== undefined || command.reasoning_enabled !== undefined)

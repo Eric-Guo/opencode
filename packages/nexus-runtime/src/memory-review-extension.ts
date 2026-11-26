@@ -5,6 +5,7 @@ const Settings = Schema.Struct({
   auto_enable: Schema.Boolean,
   path: Schema.NonEmptyString,
   model: Schema.NullOr(Schema.String),
+  every_turns: Schema.optional(Schema.Int),
 })
 
 export function memoryReviewExtension(): ExtensionModule {
@@ -18,14 +19,28 @@ export function memoryReviewExtension(): ExtensionModule {
       configuration_schema: {
         type: "object",
         properties: {
-          auto_enable: { type: "boolean" },
+          auto_enable: {
+            type: "boolean",
+            title: "Consolidate memory automatically",
+            description:
+              "Enable periodic background memory consolidation on new conversations unless disabled per conversation.",
+          },
+          every_turns: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+            default: 1,
+            title: "Consolidation cadence (turns)",
+            description:
+              "Completed turns between background memory consolidations (set to 5 for quiet periodic extraction).",
+          },
           path: { type: "string", minLength: 1 },
           model: { type: ["string", "null"] },
         },
         required: ["auto_enable", "path", "model"],
         additionalProperties: false,
       },
-      defaults: { auto_enable: false, path: "speaker/review.md", model: null },
+      defaults: { auto_enable: false, path: "speaker/review.md", model: null, every_turns: 1 },
     },
     register(api) {
       const configuration = Schema.decodeUnknownSync(Settings)(api.configuration)
