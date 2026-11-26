@@ -64,6 +64,7 @@ export const ServerOptions = Schema.Struct({
     Schema.Struct({
       filewatcher: Schema.optional(Schema.Boolean),
       fff: Schema.optional(Schema.Boolean),
+      createDirectories: Schema.optional(Schema.Boolean),
     }),
   ),
 })

@@ -62,7 +62,7 @@ import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
-import { layer } from "./location"
+import { locationLayer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
@@ -188,6 +188,7 @@ function makeRoutes(
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
     App.node.replace(App.configured(options.app)),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
+    Session.node.replace(Session.configured({ createDirectories: options.fs?.createDirectories })),
     httpFetch.replace(fetchLayer(options.fetch)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
     FileWatch.node.replace(FileWatch.configured({ enabled: options.fs?.filewatcher })),
@@ -261,7 +262,7 @@ function makeRoutes(
         ),
         Layer.provide(formLocationLayer),
         Layer.provide(sessionLocationLayer),
-        Layer.provide(layer),
+        Layer.provide(locationLayer(options.fs?.createDirectories)),
         Layer.provide(authorizationLayer),
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
