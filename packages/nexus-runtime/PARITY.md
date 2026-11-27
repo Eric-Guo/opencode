@@ -11,10 +11,65 @@ reshape since `0d98aa07776db6d38ca5d8bcaf4e10f80c39ed04`: `rho-t3` was removed,
 and `rho` gained Channels, Inbox, Routines, Skill drafts and the Superagent Ops
 routes. The ten executable non-WebUI packages have TypeScript owners and contract
 tests in the [reference contract anchors](#reference-contract-anchors). The latest
-review is the [post-refactor function verification](#post-refactor-function-verification),
-which re-checked every package against the unchanged reference and corrected eight
-divergences. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
-`rho-webui` in `packages/nexus-ui`.
+review is the [behavioral follow-up](#behavioral-follow-up-november-27-2026), which
+re-checked the current mappings and corrected three more divergences. The
+[WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks `rho-webui` in
+`packages/nexus-ui`.
+
+## Behavioral follow-up, November 27, 2026
+
+Reviewed against the unchanged Cybros `e2033ac9a` from OpenCode `7779240bd5e`
+plus the working tree and Nexus UI `031f65a4`. This pass traced the current
+registration/dispatch owners and the post-refactor transport, Telegram, OAuth,
+terminal and Superagent changes, then ran the production suites and live member-plane
+checks. The vendored SDK's complete `dist/` compared byte-for-byte with the current
+`sdks/typescript/dist/`; no SDK change was needed.
+
+| Correction | Reference contract | Change |
+| --- | --- | --- |
+| Observation preview characters | `channels.rb` uses `clean_text.slice(0, 180)` | `src/channels.ts` counts Unicode code points rather than UTF-16 code units, preserving a complete emoji at the boundary |
+| Routine fallback-name characters | `routines.rb` uses the prompt first line's `slice(0, 60)` | `src/routines.ts` uses the same 60-code-point fallback while retaining the complete prompt |
+| Snooze timestamp grammar | `inbox.rb` delegates to `Time.iso8601` | `src/inbox.ts` now requires a calendar date and seconds, rejects date-only/minute-only forms, accepts arbitrary fractional precision, and normalizes hour-only offsets such as `+08` |
+
+Each correction has a production-path regression that failed before the fix. The 25
+focused channel/routine/inbox tests then passed, followed by 505 conformance tests
+with real Chromium, PTY and WebRTC (the expected Linux-only filename skip on macOS).
+Both runtime type checkers and the build passed.
+
+The reference's `last_run_at` routine projection key is not a missing TypeScript
+contract: current Nexus emits `last_enqueued_at`, and neither the TypeScript nor Ruby
+SDK exposes `last_run_at`. The reference WebUI declares but does not read it. It is
+therefore not ported. The canonical `rho-web-tools` evidence row now correctly omits
+`policy.test.ts`, which covers Bot policy rather than web fetch.
+
+The reference anchors ran across all ten non-WebUI packages. `rho-env`'s runner suites
+must share one process because `runner_execution_test.rb` uses helpers defined in
+`runner_test.rb`; the combined run passed 63 cases. The checkpoint suite retained the
+previously documented temporary `pids` file race (32 other cases passed on each of
+three runs). Two Ruby web-client cases also remained host-network dependent: the
+link-local sentinel request timed out instead of being refused, and the unresponsive
+DNS resolver returned unexpectedly. The render/command suites passed, the TypeScript
+reader retains the corresponding link-local/CGNAT/unique-local refusal floor, and its
+full web suite passed. These environment failures are not claimed as successful
+reference verification.
+
+### Live follow-up on localhost
+
+The changed production `Channels`, `Routines` and `Inbox` classes ran against Nexus at
+`http://localhost:3000` through the paired Agent's normal credential API. All mutable
+Store documents were scoped to a disposable private workspace, leaving the Agent's
+existing profile state untouched. Four checks passed:
+
+- An observation retained exactly 180 code points and the complete boundary emoji.
+- A routine fallback name retained exactly 60 code points and the full second prompt line.
+- Date-only and minute-only snoozes were refused.
+- Long fractional seconds and an hour-only offset normalized to the same whole-second
+  UTC values as Ruby `Time.iso8601`.
+
+The Agent-created workspace was removed by its active Human owner, and its readback
+returns HTTP 404. The existing Agent, credentials, service pairing and defaults were
+unchanged. The [WebUI ledger](../nexus-ui/docs/rho-webui-parity.md#behavioral-follow-up-november-27-2026)
+records 453 UI unit tests, 129 Chromium component tests and 458 reference WebUI tests.
 
 ## Post-refactor function verification
 
@@ -753,7 +808,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 | `rho`                  | `api_key_connection_test.rb`, `host_follower_test.rb`, `execution_policy_test.rb`, `package_activation_test.rb`, `memory_review_test.rb`, `until_test.rb`, `channels_routines_inbox_test.rb`, `skill_drafts_test.rb` | `runtime`, `application`, `lifecycle`, `packages`, `memory-review`, `until`, `channels`, `inbox`, `routines`, `skill-drafts`, `superagent`, `speakers` |
 | `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb`, `webrtc_connection_test.rb`, `deadline_extension_test.rb` | `executor`, `claims`, `claim-control`, `claim-progress`, `runner`, `mutation`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
 | `rho-codemode`         | `code_test.rb`, `runtime_test.rb`, `claim_bridge_test.rb`                                                                                                            | `code`, `executor`                                                                            |
-| `rho-web-tools`        | `client_test.rb`, `render_test.rb`, `commands_test.rb`                                                                                                               | `web`, `policy`, `dev`                                                                        |
+| `rho-web-tools`        | `client_test.rb`, `render_test.rb`, `commands_test.rb`                                                                                                               | `web`, `dev`                                                                                  |
 | `rho-browser`          | `tools_test.rb`, `session_test.rb`, `session_idle_test.rb`, `session_popups_test.rb`                                                                                 | `browser` with real Chromium                                                                  |
 | `rho-mcp`              | `curation_test.rb`, `documents_test.rb`, `post_login_refresh_test.rb`, `conversations_test.rb`                                                                       | `mcp`, `mcp-session`, `mcp-sessions`, `mcp-exchange`, `captured-mcp`                          |
 | `rho-acp`              | `acp/reference_replay_test.rb`, `acp/recovery_attach_test.rb`, `acp/permissions_test.rb`, `acp/materialization_test.rb`                                              | `editor-replay`, `editor-permissions`, `editor`, `application`, `runtime`                     |
