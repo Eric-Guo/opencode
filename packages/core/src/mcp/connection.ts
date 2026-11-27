@@ -128,8 +128,9 @@ export interface Connection {
   readonly start: Effect.Effect<void>
   readonly stop: Effect.Effect<void>
   /**
-   * Runs a request against `client` and, if that request observed a session expiry, reconnects and
-   * runs it once more against the replacement. Any other failure passes through.
+   * Runs a request against `client` and, if that request observed a session expiry — its own, or the
+   * connection closing under it while another request's recovery ran — reconnects and runs it once
+   * more against the replacement. Any other failure passes through.
    */
   readonly recovering: <A, E extends Error>(
     client: McpClient.Connection,
@@ -244,9 +245,16 @@ export function make(input: Input): Connection {
           error instanceof McpError.NeedsAuthError ? refused(target, error.message) : Effect.void,
         ),
       )
+    // A request whose connection another request's session-expiry recovery closed mid-flight fails
+    // with the transport's "Connection closed" rather than the expiry itself. The recovery is already
+    // on its way, so the request gets the same reconnect-and-retry: `recover` waits out the in-flight
+    // attempt on the lock and returns at once when the client was already replaced.
+    const expired = (error: Error) =>
+      error instanceof McpError.SessionExpiredError ||
+      (error instanceof McpError.TransportError && current()?.client !== client)
     return attempt(client).pipe(
       Effect.catchIf(
-        (error) => error instanceof McpError.SessionExpiredError,
+        expired,
         (error) =>
           recover(client).pipe(
             Effect.flatMap(() => {
