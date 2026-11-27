@@ -6,6 +6,9 @@ import { changeDocument, StoreDocument } from "./document"
 export const inboxNamespace = "rho.inbox"
 export const indefinite = "indefinite"
 
+// The reference parses with Time.iso8601: extended ISO-8601 only, never free-form dates.
+const iso8601Input = /^\d{4}-\d{2}-\d{2}(?:[Tt]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/
+
 export class InboxError extends Error {}
 
 const InboxEntry = Schema.Struct({
@@ -346,7 +349,7 @@ function normalizeUntil(untilAt: string | null, now: Date): string | null {
 
   const parsed = new Date(clean)
 
-  if (Number.isNaN(parsed.getTime()))
+  if (!iso8601Input.test(clean) || Number.isNaN(parsed.getTime()))
     throw new InboxError("until_at must be an ISO-8601 timestamp, 'indefinite', or null")
   if (parsed.getTime() <= now.getTime()) throw new InboxError("snooze time must be in the future")
   return iso8601(parsed)

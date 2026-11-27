@@ -23,6 +23,12 @@ export function transientControlError(error: unknown) {
   return error instanceof TransportError || (error instanceof APIError && (error.status === 429 || error.status >= 500))
 }
 
+/** A commit write retries only a transport drop or a throttle; a 5xx is the door's own refusal and final. */
+export function transientCommitError(error: unknown) {
+  if (error instanceof CancelledError) return false
+  return error instanceof TransportError || (error instanceof APIError && error.status === 429)
+}
+
 // The server's own count of the remaining park outranks deadline math on a skewed host clock.
 function grantedDeadline(claim: Pick<ClaimedTask, "deadline_at" | "remaining_ms">) {
   if (typeof claim.remaining_ms === "number") return Date.now() + claim.remaining_ms
@@ -264,7 +270,7 @@ export class ClaimOperations {
           await scheduler.wait(250, { signal: this.signal })
           return this.accept(key, request)
         }
-        if (error instanceof APIError && error.status < 500) throw error
+        if (error instanceof APIError) throw error
         const event = (await this.history()).find((event) => event.type === "operation" && event.key === key)
         if (event) return event
         throw error
