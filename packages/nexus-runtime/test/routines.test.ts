@@ -121,6 +121,23 @@ test("time routines without a name fall back to the prompt's first line", async 
   }
 })
 
+test("time routine fallback names retain 60 Unicode characters without splitting emoji", async () => {
+  const firstLine = "a".repeat(59) + "😀following"
+  const { fixture, routines } = routinesFixture([scheduleRow({ prompt: firstLine + "\nSecond line" })])
+
+  try {
+    const unified = await routines.list({ client: fixture.client, workspace_public_id: "ws-1" })
+    const time = unified.time_routines[0]
+
+    expect([...time.name]).toHaveLength(60)
+    expect(time.name).toBe("a".repeat(59) + "😀")
+    expect(time.name.isWellFormed()).toBe(true)
+    expect(time.what).toBe(firstLine + "\nSecond line")
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("event routines project accept_mode and status from their source", async () => {
   const { fixture, channels, routines } = routinesFixture([])
 

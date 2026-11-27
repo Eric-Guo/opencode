@@ -95,7 +95,7 @@ function projectSchedule(schedule: Schedule): TimeRoutine {
     kind: "time",
     public_id: schedule.public_id,
     ...(schedule.conversation_public_id ? { conversation_public_id: schedule.conversation_public_id } : {}),
-    name: schedule.name ?? prompt.split("\n")[0].trim().slice(0, 60),
+    name: schedule.name ?? Array.from(prompt.split("\n")[0].trim()).slice(0, 60).join(""),
     what: prompt,
     starts: schedule.rule,
     does: doesForWake(schedule.wake),
