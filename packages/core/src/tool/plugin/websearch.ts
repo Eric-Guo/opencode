@@ -184,6 +184,13 @@ export const Plugin = {
                 const fallback = `Unable to search the web for ${input.query}`
                 if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
                 const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
+                if (Schema.is(WebSearchMcp.ToolError)(error.cause)) {
+                  return new ToolFailure({
+                    message: `Web search failed: ${error.cause.message}`,
+                    error,
+                    metadata: { provider: error.providerID },
+                  })
+                }
                 if (status === undefined) {
                   const message =
                     error.cause instanceof Error &&
@@ -194,9 +201,7 @@ export const Plugin = {
                   return new ToolFailure({ message, metadata: { provider: error.providerID } })
                 }
                 return new ToolFailure({
-                  message: Schema.is(WebSearchMcp.ToolError)(error.cause)
-                    ? `Web search failed: ${error.cause.message}`
-                    : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
+                  message: httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`,
                   error,
                   metadata: { provider: error.providerID },
                 })
