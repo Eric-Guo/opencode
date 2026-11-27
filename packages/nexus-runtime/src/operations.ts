@@ -59,7 +59,12 @@ export const Operation = Schema.Union([
   Schema.Struct({ action: Schema.Literals(["identity", "rules"]) }),
   Schema.Struct({ action: Schema.Literal("followers"), side: Schema.optional(Schema.Boolean) }),
   Schema.Struct({ action: Schema.Literal("adaptations"), model: Schema.optional(Schema.String) }),
-  Schema.Struct({ action: Schema.Literal("personal_desk"), ...Workspace }),
+  Schema.Struct({
+    action: Schema.Literal("personal_desk"),
+    ...Workspace,
+    attach_runner: Schema.optional(Schema.Boolean),
+    default_runner_executor_public_id: Schema.optional(Schema.String),
+  }),
   Schema.Struct({ action: Schema.Literal("inbox"), ...Workspace }),
   Schema.Struct({
     action: Schema.Literal("inbox.snooze"),
@@ -167,7 +172,7 @@ export const Operation = Schema.Union([
     ...Workspace,
     kind: Schema.Literal("event"),
     name: Schema.String,
-    source_key: Schema.String,
+    source_key: Schema.optional(Schema.String),
     instructions: Schema.optional(Schema.String),
     what: Schema.optional(Schema.String),
     pattern: Schema.optional(Schema.String),
@@ -340,6 +345,7 @@ export const Operation = Schema.Union([
     after_position: Schema.optional(Schema.Int),
     before_position: Schema.optional(Schema.Int),
     limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
+    include_execution: Schema.optional(Schema.Boolean),
     include_tool_outputs: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
@@ -793,14 +799,21 @@ export class Operations {
     }
     if (input.action === "runs") return this.runs(input, [], options)
 
-    if (input.action === "personal_desk")
+    if (input.action === "personal_desk") {
+      const runner =
+        input.attach_runner === true
+          ? (input.default_runner_executor_public_id ?? this.identity.runner).trim() || undefined
+          : undefined
+
       return {
         conversation: await this.channels.ensurePersonalDesk({
           client: this.member,
           workspace_public_id: selected,
+          default_runner_executor_public_id: runner,
           owner_speaker_public_id: await ownerSpeaker(this.member, this.identity.agent, options),
         }),
       }
+    }
     if (input.action === "inbox") {
       const [overview, activeRuns] = await Promise.all([this.channels.overview(), this.activeRuns(options)])
 
@@ -918,8 +931,10 @@ export class Operations {
         external_id: input.external_id,
       })
 
-      if (!trigger || reason === "")
-        throw new Error("trigger_public_id (or external_id/source_key+thread_key) and reason are required")
+      if (!input.conversation || !trigger || reason === "")
+        throw new Error(
+          "conversation_public_id, trigger_public_id (or external_id/source_key+thread_key) and reason are required",
+        )
 
       const desk = await this.channels.ensurePersonalDesk({
         client: this.member,
@@ -931,7 +946,7 @@ export class Operations {
         handback: await workspace.triggers.handback(
           trigger,
           {
-            conversation_public_id: input.conversation ?? desk.public_id,
+            conversation_public_id: input.conversation,
             reason,
             router_conversation_public_id: input.router ?? desk.public_id,
             model: input.model ?? (await this.application.prepare()).model ?? undefined,
@@ -944,7 +959,7 @@ export class Operations {
     if (input.action === "routines.create") {
       const created = await this.channels.createEventRoutine({
         name: input.name,
-        source_key: input.source_key,
+        source_key: input.source_key ?? "*",
         instructions: input.what ?? input.instructions ?? "",
         pattern: input.pattern,
         does: input.does,
@@ -1161,7 +1176,7 @@ export class Operations {
             after_position: input.after_position,
             before_position: input.before_position,
             limit: input.limit,
-            include_execution: true,
+            include_execution: input.include_execution,
             include_tool_outputs: input.include_tool_outputs,
           },
           options,

@@ -70,7 +70,7 @@ test("an extension granted in remaining_ms moves the commit retry window past th
   fixture.control.refuseCommit = () => {
     refusals++
     return refusals === 1
-      ? Response.json({ error: { code: "unavailable" } }, { status: 503, headers: { "Retry-After": "1" } })
+      ? Response.json({ error: { code: "rate_limited" } }, { status: 429, headers: { "Retry-After": "1" } })
       : undefined
   }
   try {
@@ -90,3 +90,28 @@ test("an extension granted in remaining_ms moves the commit retry window past th
     await fixture.close()
   }
 }, 15000)
+
+test("a 5xx commit refusal is final and keeps the durable result for recovery", async () => {
+  const fixture = await executorFixture()
+  fixture.add("run", "final", "probe")
+  const task = fixture.client.inboxTask("run", "final")
+  const claim = await task.claim()
+  const row = {
+    run: "run",
+    task: "final",
+    token: claim.claim_token,
+    result: { outcome: "completed" as const, content: "done" },
+  }
+  await fixture.journal.save(row)
+  fixture.control.refuseCommit = () =>
+    Response.json({ error: { code: "unavailable" } }, { status: 503, headers: { "Retry-After": "1" } })
+  try {
+    await expect(
+      fixture.journal.settle(fixture.client, row, new AbortController().signal, () => Date.now() + 60000),
+    ).rejects.toThrow()
+    expect(fixture.commits).toHaveLength(1)
+    expect(await fixture.pending()).toHaveLength(1)
+  } finally {
+    await fixture.close()
+  }
+})

@@ -1,5 +1,6 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test"
-import { ExecutorClient, type ClaimedTask, type JsonObject, type OperationEvent } from "@cybros/agent"
+import { createServer } from "node:http"
+import { APIError, ExecutorClient, type ClaimedTask, type JsonObject, type OperationEvent } from "@cybros/agent"
 import { ClaimDeadline, ClaimLease, ClaimOperations } from "../src/claim-control"
 import { RunnerAdmission } from "../src/runner"
 import { definition } from "../src/extensions"
@@ -174,7 +175,6 @@ test("concurrent operations receive their own out-of-order observations and reco
 
         events.push(accepted)
         if (events.length === 2) submitted.resolve()
-        if (input.operation.key === "first") return Response.json({ error: { code: "lost_response" } }, { status: 503 })
 
         return Response.json({ operation: accepted })
       }
@@ -200,7 +200,22 @@ test("concurrent operations receive their own out-of-order observations and reco
       return new Response(null, { status: 404 })
     },
   })
-  const client = new ExecutorClient({ baseURL: server.url.origin, credential: "executor" })
+  // Nexus records the first acceptance; its response is lost in transit.
+  let lost = true
+  const client = new ExecutorClient({
+    baseURL: server.url.origin,
+    credential: "executor",
+    fetch: async (input, init) => {
+      const response = await fetch(input, init)
+      const body = typeof init?.body === "string" ? (JSON.parse(init.body) as { operation?: { key?: string } }) : null
+
+      if (lost && init?.method === "POST" && body?.operation?.key === "first") {
+        lost = false
+        throw new TypeError("fetch failed")
+      }
+      return response
+    },
+  })
   const operations = new ClaimOperations(client.inboxTask("run", "parent"), "claim", AbortSignal.timeout(5000))
   const results = await Promise.all([
     operations.invoke("first", { kind: "tool", name: "first", input: {} }),
@@ -212,6 +227,52 @@ test("concurrent operations receive their own out-of-order observations and reco
     { status: "completed", output: "second" },
   ])
   expect(events.filter((entry) => entry.key === "first")).toHaveLength(1)
+})
+
+test("a 5xx submit refusal is final and never reconciles the recorded acceptance", async () => {
+  const events: OperationEvent[] = []
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1")
+
+    if (url.pathname.endsWith("/operations") && request.method === "POST") {
+      let body = ""
+      request.on("data", (chunk) => (body += chunk))
+      request.on("end", () => {
+        const input = JSON.parse(body) as { operation: { key: string } }
+
+        events.push({
+          key: input.operation.key,
+          type: "operation",
+          position: events.length + 1,
+          request: { kind: "tool", name: input.operation.key, input: {} },
+          receipt: { accepted: true },
+          outcome: null,
+          refusal: null,
+        })
+        response.writeHead(503, { "content-type": "application/json" })
+        response.end(JSON.stringify({ error: { code: "unavailable" } }))
+      })
+      return
+    }
+    response.writeHead(404).end()
+  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  const port = typeof address === "object" && address ? address.port : 0
+  const client = new ExecutorClient({ baseURL: `http://127.0.0.1:${port}`, credential: "executor" })
+  const operations = new ClaimOperations(client.inboxTask("run", "parent"), "claim", AbortSignal.timeout(5000))
+
+  try {
+    const failure = await operations
+      .invoke("refused", { kind: "tool", name: "refused", input: {} })
+      .catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(APIError)
+    expect((failure as APIError).status).toBe(503)
+    expect(events).toHaveLength(1)
+  } finally {
+    server.close()
+  }
 })
 
 test("paused native questions retain their request, recover cursor drift and reuse durable answers", async () => {

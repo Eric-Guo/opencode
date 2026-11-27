@@ -6,7 +6,7 @@ import { APIError, type ExecutorClient } from "@cybros/agent"
 import { setTimeout as delay } from "node:timers/promises"
 import { atomic } from "./storage"
 import { claimResult } from "./claim-result"
-import { transientControlError } from "./claim-control"
+import { transientCommitError } from "./claim-control"
 
 const Record = Schema.Struct({
   run: Schema.String,
@@ -63,7 +63,7 @@ export class ClaimJournal {
           await this.remove(row)
           return
         }
-        if (!transientControlError(error)) throw error
+        if (!transientCommitError(error)) throw error
 
         // A lost commit response may already have settled the claim. Never rerun the handler.
         const status = await task.claimStatus(row.token, { signal }).catch((cause: unknown) => {

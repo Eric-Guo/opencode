@@ -415,6 +415,28 @@ test("personal_desk ensures the workspace desk with the resolved owner speaker",
     await app.operations.command({ action: "personal_desk", workspace: "other" })
     expect(calls.created).toHaveLength(2)
     expect(calls.created[1]?.title).toBe("Personal Desk")
+
+    await app.operations.command({ action: "personal_desk", workspace: "attached", attach_runner: true })
+    expect(calls.created[2]?.default_runner_executor_public_id).toBe("runner")
+
+    await app.operations.command({
+      action: "personal_desk",
+      workspace: "explicit",
+      attach_runner: true,
+      default_runner_executor_public_id: "runner-2",
+    })
+    expect(calls.created[3]?.default_runner_executor_public_id).toBe("runner-2")
+
+    await app.operations.command({
+      action: "personal_desk",
+      workspace: "detached",
+      attach_runner: true,
+      default_runner_executor_public_id: "",
+    })
+    expect(calls.created[4]?.default_runner_executor_public_id).toBeNull()
+
+    await app.operations.command({ action: "personal_desk", workspace: "plain", default_runner_executor_public_id: "runner-3" })
+    expect(calls.created[5]?.default_runner_executor_public_id).toBeNull()
   } finally {
     fixture.server.stop(true)
   }
@@ -783,9 +805,20 @@ test("subscriptions and handback mirror the thread coordination routes", async (
       addressed: true,
     })
 
+    await expect(
+      app.operations.command({
+        action: "triggers.handback",
+        external_id: "evt-9",
+        reason: "Out of scope for this ticket",
+      }),
+    ).rejects.toThrow(
+      "conversation_public_id, trigger_public_id (or external_id/source_key+thread_key) and reason are required",
+    )
+
     const handed = (await app.operations.command({
       action: "triggers.handback",
       external_id: "evt-9",
+      conversation: "conv-ticket",
       reason: "Out of scope for this ticket",
     })) as { handback: JsonObject }
     const deskId = [...conversations.keys()].at(-1)!
@@ -794,7 +827,7 @@ test("subscriptions and handback mirror the thread coordination routes", async (
     expect(calls.handbacks.at(-1)).toEqual([
       "trig-1",
       {
-        conversation_public_id: deskId,
+        conversation_public_id: "conv-ticket",
         reason: "Out of scope for this ticket",
         router_conversation_public_id: deskId,
         model: "provider/default",
