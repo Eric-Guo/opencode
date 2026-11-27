@@ -2944,9 +2944,11 @@ test("a working session finishing in the inbox shelf leaves the list where it wa
   await expect(recent).toHaveCount(12)
   expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
 
-  // Open the first session, then move focus down the list to the working card without opening it.
+  // Let the session's composer finish taking focus before moving to the working card without opening it.
   await recent.first().click()
   await expectPath(page, sessionHref("ses_finish_read_00"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
+  await recent.first().focus()
   await expect(recent.first()).toBeFocused()
   await page.keyboard.press("End")
   await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toBeFocused()
