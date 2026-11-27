@@ -7,6 +7,7 @@ variables:
   # Shanghai Jiao Tong University mirror for the Shanghai runner.
   UBUNTU_APT_MIRROR: "https://mirror.sjtu.edu.cn"
   BUN_INSTALL_CACHE_DIR: "$CI_PROJECT_DIR/.cache/bun"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
   HUSKY: "0"
   GITHUB_ACTIONS: "false"
   TURBO_TELEMETRY_DISABLED: "1"
@@ -38,6 +39,7 @@ default:
         - package.json
     paths:
       - .cache/bun/
+      - .cache/npm/
   before_script:
     # Set NPM_CONFIG_REGISTRY in GitLab to use a nearby mirror for npm and Bun.
     - npm install --global "$(node -p 'require("./package.json").packageManager')"
@@ -129,6 +131,8 @@ packages:
 .browser:
   extends: .ci
   stage: test
+  # A cold install on the Shanghai runner can consume most of the default one-hour budget.
+  timeout: 7200 seconds
   # Browser fixtures need no native toolchain. Downloading it on every shard can
   # exhaust the job timeout before Playwright gets to run.
   before_script:
@@ -152,6 +156,9 @@ packages:
 app-e2e:
   extends: .browser
   parallel: 2
+  # Avoid the renderer crashes seen with five Chromium workers on this runner.
+  variables:
+    PLAYWRIGHT_WORKERS: "2"
   script:
     # Both Playwright projects run, including the touch-scroll project.
     - bun run --cwd packages/app test:e2e:built --shard="$CI_NODE_INDEX/$CI_NODE_TOTAL" --reporter=line,html,junit
