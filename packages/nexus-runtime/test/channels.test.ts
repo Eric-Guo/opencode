@@ -257,6 +257,36 @@ test("gate distinguishes explicit, observe and auto proactive rules", async () =
   }
 })
 
+test("observation previews retain 180 Unicode characters without splitting emoji", async () => {
+  const { fixture } = channelFixture()
+  const channels = new Channels(fixture.client.profile.storeEntries)
+
+  try {
+    await channels.createEventRoutine({
+      name: "Unicode Watch",
+      source_key: "github",
+      instructions: "Watch.",
+    })
+
+    const observed = await channels.ingest({
+      client: fixture.client,
+      workspace_public_id: "ws-1",
+      source_key: "github",
+      external_id: "evt-unicode",
+      thread_key: "pr-unicode",
+      text: "a".repeat(179) + "😀following",
+      actor_kind: "bot",
+    })
+
+    if (!("observation" in observed)) throw new Error("expected observed")
+    expect([...observed.observation.preview]).toHaveLength(180)
+    expect(observed.observation.preview).toBe("a".repeat(179) + "😀")
+    expect(observed.observation.preview.isWellFormed()).toBe(true)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("outbox respects quiet hours, daily budget and uncertain adapter non-retry", async () => {
   const { fixture, calls, state } = channelFixture()
   const now = { at: new Date("2026-11-26T14:00:00Z") }

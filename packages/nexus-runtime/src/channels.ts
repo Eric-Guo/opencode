@@ -544,7 +544,7 @@ export class Channels {
         thread_key: threadKey,
         decision: "would_accept",
         matched_rules: gate.matched_rules.map((rule) => rule.name),
-        preview: input.text.slice(0, 180),
+        preview: Array.from(input.text).slice(0, 180).join(""),
       })
       const fanned = await workspace.triggers.create(trigger)
 

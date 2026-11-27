@@ -6,8 +6,8 @@ import { changeDocument, StoreDocument } from "./document"
 export const inboxNamespace = "rho.inbox"
 export const indefinite = "indefinite"
 
-// The reference parses with Time.iso8601: extended ISO-8601 only, never free-form dates.
-const iso8601Input = /^\d{4}-\d{2}-\d{2}(?:[Tt]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/
+// Time.iso8601 requires a calendar date and seconds, accepts arbitrary fractional precision and hour-only offsets.
+const iso8601Input = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}(?::?\d{2})?)?$/
 
 export class InboxError extends Error {}
 
@@ -347,7 +347,11 @@ function normalizeUntil(untilAt: string | null, now: Date): string | null {
   if (clean === "") return null
   if (clean === indefinite) return indefinite
 
-  const parsed = new Date(clean)
+  const normalized = clean.replace(
+    /([+-]\d{2})(?::?(\d{2}))?$/,
+    (_match, hours: string, minutes: string | undefined) => `${hours}:${minutes ?? "00"}`,
+  )
+  const parsed = new Date(normalized)
 
   if (!iso8601Input.test(clean) || Number.isNaN(parsed.getTime()))
     throw new InboxError("until_at must be an ISO-8601 timestamp, 'indefinite', or null")

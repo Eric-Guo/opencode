@@ -292,6 +292,36 @@ test("snooze validates until_at and clears on null or empty", async () => {
   }
 })
 
+test("snooze follows the reference Time.iso8601 grammar", async () => {
+  const { fixture, conversations, inbox } = inboxFixture()
+
+  try {
+    conversations.set("conv-a", summaryRow({ public_id: "conv-a" }))
+
+    for (const untilAt of ["2026-11-27", "2026-11-27T16:00Z"]) {
+      await expect(
+        inbox.snooze({ workspace_public_id: "ws-1", conversation_public_id: "conv-a", until_at: untilAt }),
+      ).rejects.toThrow("until_at must be an ISO-8601 timestamp, 'indefinite', or null")
+    }
+
+    const precise = await inbox.snooze({
+      workspace_public_id: "ws-1",
+      conversation_public_id: "conv-a",
+      until_at: "2026-11-27T12:34:56.12345678901234567890Z",
+    })
+    expect(precise.snoozed_until).toBe("2026-11-27T12:34:56Z")
+
+    const hourOffset = await inbox.snooze({
+      workspace_public_id: "ws-1",
+      conversation_public_id: "conv-a",
+      until_at: "2026-11-27T00:00:00+08",
+    })
+    expect(hourOffset.snoozed_until).toBe("2026-11-26T16:00:00Z")
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("active runs and busy conversations classify by whose turn it is", async () => {
   const { fixture, conversations, inbox } = inboxFixture()
 
