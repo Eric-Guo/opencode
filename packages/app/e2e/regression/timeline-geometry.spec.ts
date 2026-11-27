@@ -701,7 +701,7 @@ async function captureCardEdges(page: Page, card: Locator) {
         const left = Math.floor((box.x + 8) * scale.x)
         const width = Math.floor((box.width - 16) * scale.x)
 
-        return candidates.map((row) => {
+        return Array.from(new Set(candidates), (row) => {
           const pixels = context.getImageData(left, row, width, 1).data
           const indexes = Array.from({ length: width }, (_, index) => index * 4)
 
@@ -710,9 +710,13 @@ async function captureCardEdges(page: Page, card: Locator) {
               indexes
                 .map((index) => (pixels[index]! + pixels[index + 1]! + pixels[index + 2]!) / 3)
                 .reduce((sum, value) => sum + value, 0) / width,
+            // The channel difference measures even a partially covered pixel against the neutral background.
             magenta:
-              indexes.filter((index) => pixels[index]! > 200 && pixels[index + 1]! < 180 && pixels[index + 2]! > 200)
-                .length / width,
+              indexes.reduce(
+                (sum, index) => sum + Math.max(0, Math.min(pixels[index]!, pixels[index + 2]!) - pixels[index + 1]!),
+                0,
+              ) /
+              (255 * width),
           }
         })
       }
@@ -737,8 +741,9 @@ async function captureCardEdges(page: Page, card: Locator) {
           bottom: rows([Math.ceil(bottom) - 1])[0]!.luminance,
         },
         magenta: {
-          top: Math.max(...topRows.map((row) => row.magenta)),
-          bottom: Math.max(...bottomRows.map((row) => row.magenta)),
+          // At fractional scales Chromium can split a thin border across device-pixel rows.
+          top: topRows.reduce((sum, row) => sum + row.magenta, 0),
+          bottom: bottomRows.reduce((sum, row) => sum + row.magenta, 0),
           vertical: Array.from(columns).filter((count) => count > box.height * scale.y * 0.75).length,
         },
       }
