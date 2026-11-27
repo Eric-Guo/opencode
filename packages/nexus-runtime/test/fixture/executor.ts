@@ -78,10 +78,6 @@ export async function executorFixture() {
         if (refusal) return refusal
         results.set(key, body)
         control.committed?.(run, task, body)
-        if (control.lostCommitResponse) {
-          control.lostCommitResponse = false
-          return Response.json({ error: { code: "response_lost" } }, { status: 503 })
-        }
         return Response.json({
           task: {
             key: task,
@@ -142,7 +138,19 @@ export async function executorFixture() {
     results,
     calls,
     commits,
-    client: new ExecutorClient({ baseURL: server.url.origin, credential: "fixture-executor" }),
+    client: new ExecutorClient({
+      baseURL: server.url.origin,
+      credential: "fixture-executor",
+      fetch: async (input, init) => {
+        const response = await fetch(input, init)
+        // The commit landed; its response is lost in transit.
+        if (control.lostCommitResponse && init?.method === "POST" && String(input).includes("/commit")) {
+          control.lostCommitResponse = false
+          throw new TypeError("fetch failed")
+        }
+        return response
+      },
+    }),
     pending: () => readdir(join(directory, "claims")),
     async close() {
       server.stop(true)

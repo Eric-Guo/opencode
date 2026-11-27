@@ -11,9 +11,97 @@ reshape since `0d98aa07776db6d38ca5d8bcaf4e10f80c39ed04`: `rho-t3` was removed,
 and `rho` gained Channels, Inbox, Routines, Skill drafts and the Superagent Ops
 routes. The ten executable non-WebUI packages have TypeScript owners and contract
 tests in the [reference contract anchors](#reference-contract-anchors). The latest
-review covers the [Personal Superagent alignment](#personal-superagent-alignment).
-The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
+review is the [post-refactor function verification](#post-refactor-function-verification),
+which re-checked every package against the unchanged reference and corrected eight
+divergences. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Post-refactor function verification
+
+Reviewed November 27, 2026 against Cybros `e2033ac9a` from OpenCode `06a85a30caf`
+plus the working tree. The reference checkout is unchanged since the Personal
+Superagent review; this pass re-verified every executable non-WebUI package at
+function level against the reference source and tests, rebuilt the vendored SDK
+from `sdks/typescript` (no drift), and corrected the divergences below. The
+[WebUI ledger](../nexus-ui/docs/rho-webui-parity.md) records the matching UI pass.
+
+| Correction | Reference contract | Change |
+| --- | --- | --- |
+| Trigger handback requires its conversation | `superagent_routes.rb` refuses an empty `conversation_public_id` | `src/operations.ts` refuses with the reference message instead of substituting the desk; explicit `router`/`model` overrides remain as additive fields, defaulting to the desk and the prepared default model |
+| Desk runner attachment | `superagent_routes.rb` `attach_runner` with `ctx.runner_selection(body)` | `personal_desk` accepts `attach_runner` and `default_runner_executor_public_id`; an explicit empty value selects no runner, an absent value falls back to the runtime's own runner |
+| Event routine source default | `superagent_routes.rb` `body.fetch("source_key", "*")` | `routines.create` defaults an omitted `source_key` to `"*"` |
+| Commit retry set | `task_run.rb` retries only `TransportError` and throttles on commit; a 5xx is a typed refusal and final | `src/claims.ts` settles through `transientCommitError` (transport/429); a 5xx commit throws and keeps the durable journal row for recovery |
+| Submit acceptance reconcile | `claim_orchestration.rb` reconciles a lost submit from the trace on `TransportError` only | `src/claim-control.ts` no longer reconciles 5xx submits from history; they propagate |
+| Memory review instructions | `memory_review/review.rb` `INSTRUCTIONS` | `src/memory-review.ts` carries the reference text (product-neutral "reply" for "rho reply"), restoring the dropped qualifiers |
+| Snooze timestamp grammar | `inbox.rb` parses with `Time.iso8601` | `src/inbox.ts` validates extended ISO-8601 before parsing instead of accepting any `Date`-parseable string |
+| History execution selection | `conversation_history.rb` forwards the caller's `include_execution` | `src/operations.ts` forwards the caller's value (omitted when unset) instead of hardcoding `true` |
+
+Newly recorded intentional differences:
+
+- ACP agent permissions accept `"ask"` alongside the reference's `allow|reject`
+  grammar (`src/acp-settings.ts`, `src/acp-policy.ts`), routing through OpenCode's
+  native approval flow. The 16 MiB ACP transcript capture cap
+  (`src/acp-capture.ts`) is a defensive TypeScript bound; an earlier section
+  described it as reference-backed, which was incorrect.
+- The pre-existing OpenCode stores keep their `opencode.presets`, `opencode.bots`
+  and `opencode.memory-review` namespaces rather than the reference's `rho.*`
+  keys, preserving existing installations; the new Superagent stores keep the
+  reference `rho.channels`, `rho.inbox` and `rho.skill_drafts` namespaces.
+- `channels.ingest` validates `delivery_mode` against the server's accepted set
+  (`steer`, `steer_now`, `queue`) at the operation boundary; the reference
+  forwards arbitrary strings for the server to refuse.
+- The claim-status poll is a fixed 5 seconds; the reference scales
+  `max(5s, workers/5)`, identical at 25 or fewer workers.
+- Telegram private-chat conversations carry `opencode.surface: "telegram"`
+  metadata; the reference writes no surface key there. `bot.workspace` is a
+  distinct TypeScript command where the reference folds the home workspace into
+  `bot.new` fields. Memory-review turn discovery polls once per second where the
+  reference uses follower settlement callbacks; the cadence predicate is identical.
+- Schedule durations accept the reference's `s`, `m`, `h` and `d` units
+  (`Gateway::DeliveryTime`).
+
+Reference anchor corrections: the personal Bot lives at
+`daemon/host_followers/bots.rb`; `rho-env` gains `webrtc_connection_test.rb` (the
+ICE-inheritance contract); `rho-dev` gains `dev_watch_test.rb`,
+`dev_commands/environment_test.rb` and `dev_commands/prompt_test.rb`. The
+`rho-web-tools` evidence row no longer cites `policy.test.ts` (Bot-policy rules);
+the literal web-fetch grant is exercised in `dev.test.ts`.
+
+Validation passed 495 unit tests with 6 environment skips, then 499 conformance
+tests with real Chromium, PTY and WebRTC (one Linux-only filename skip; the
+pre-existing intermittent `sides.test.ts` fork-order race failed once and passes
+in isolation). Each correction has a regression that failed before the fix. Both
+runtime type checkers and the build passed.
+
+### Live verification on localhost
+
+On November 27, 2026 a scratch Agent with member and executor credentials ran 26
+checks against the development Nexus at `http://localhost:3000`, driving the
+production operations layer and a `NexusExecutor` with the builtin toolset:
+
+- The Personal Desk bound `memory_context.mode == "index"` and
+  `opencode.surface` metadata, ensured idempotently; `attach_runner` bound the
+  scratch runner.
+- The gate recorded `would_accept` for a matching rule in observe mode and routed
+  to the desk with `strength: "inferred"` after switching to auto; quiet hours
+  suppressed a proactive result while a plain answer queued, and the drain
+  settled `sent` leaving `uncertain` unsettled.
+- The Inbox listed the desk, refused a non-ISO snooze, snoozed `indefinite` and
+  completed `marked_read`. An event routine defaulted `source_key` to `"*"`; a
+  daily schedule stored `wake: "passive"` with the check-in prefix and paused,
+  resumed and canceled.
+- Skill drafts approved into the workspace collection and dismissed. Handback
+  refused a missing conversation and queued one from a subscribed ticket
+  (`queued: true`).
+- The executor claimed and settled bash, write, read and `file_publish` tasks;
+  the published bytes downloaded identically; an ask-rule bash held for a Human
+  approval and completed after it; the `tool_name` run filter selected bash runs
+  only.
+
+The scratch Agent reached `removed`, its credentials answer HTTP 401, both
+scratch workspaces are deleted, and the elected service kept its original
+pairing. The local Surge proxy intercepts loopback requests; the UI's
+desktop-bridge test and these checks run with `NO_PROXY=127.0.0.1,localhost`.
 
 ## Personal Superagent alignment
 
@@ -35,7 +123,7 @@ budget-ledger resources.
 | `rho` agent tools (`channel_dispatch`, `propose_skill`) | `src/superagent-tools.ts`, `src/builtins.ts` (`nexus.superagent`) | Agent-served, environment-independent tools in every run declaration; dispatch actions reach the operations layer; failures return tool errors |
 | `rho-ingress-telegram` outbox pump | `src/telegram-ingress.ts` | `telegram` adapter registration on activation, 2-second drain pump across workspaces, delivery verdict mapping (sent/dropped channel_gone/failed/uncertain unsettled), `personal` bot key |
 | `rho` memory index mode (`speakers.rb`) | `src/speakers.ts`, create paths in `application.ts`, `bots.ts`, `telegram.ts`, `editor.ts` | Every runtime-created conversation binds `memory_context` with `mode: "index"`; explicit full omits the key; speaker binding pinned |
-| `rho` personal Bot (`host_followers/bots.rb`) | `src/bots.ts`, `src/telegram-settings.ts`, `src/operations.ts` | Synthetic `personal` target without a profile agent row, owner audience, first-workspace home fallback, desk surface metadata, bot gate skipped, rewind guard refuses only non-personal Bots |
+| `rho` personal Bot (`daemon/host_followers/bots.rb`) | `src/bots.ts`, `src/telegram-settings.ts`, `src/operations.ts` | Synthetic `personal` target without a profile agent row, owner audience, first-workspace home fallback, desk surface metadata, bot gate skipped, rewind guard refuses only non-personal Bots |
 | `rho` memory review cadence (`memory_review.rb`) | `src/memory-review.ts`, `src/memory-review-extension.ts` | `every_turns` default 1 clamped 1–50; a review forks only when `position - after >= every_turns` |
 | `rho` preset seeds and prompts (`agent_presets.rb`, `execution_policy.rb`, `run_declaration.rb`, `memory_policy.rb`) | `src/presets.ts`, `src/execution-policy.ts`, `src/memory-policy.ts` | Seeds renamed Personal/Peer with generalized role prompts; attention doctrine, handback guidance and index-mode memory taxonomy in the declaration text |
 | `rho` OAuth coalescing (`oauth_login.rb`) | `src/login.ts` | Concurrent verifications of one bearer share a single in-flight profile read; nothing is cached, so revocation is observed on the next request |
@@ -645,7 +733,7 @@ The scratch Bots and MCP connections were removed, the workspace reached
 | Reference contracts                                                                                                     | TypeScript owner                                                                                               | Behavioral evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rho-codemode`: JavaScript binding, frozen catalog, operation receipts and observations                                 | `code.ts`, `orchestration.ts`, `claim-control.ts`                                                              | `code.test.ts`, `executor.test.ts`: native interpreter scheduling, refusal/error distinctions, copied JSON, accepted background ownership, observed-resource forwarding, native execution/data limits and a real native child with one startup slot                                                                                                                                                                                                                         |
-| `rho-web-tools`: fetch policy, renderer, captures and operator fetch                                                    | `web.ts`, `approval-grant.ts`, development terminal                                                            | `web.test.ts`, `dev.test.ts`, `policy.test.ts`: bounded same-site redirects, DNS/address filtering, compression/charset handling, whole content-addressed captures, cancellation, literal authority grants and raw operator output                                                                                                                                                                                                                                          |
+| `rho-web-tools`: fetch policy, renderer, captures and operator fetch                                                    | `web.ts`, `approval-grant.ts`, development terminal                                                            | `web.test.ts`, `dev.test.ts`: bounded same-site redirects, DNS/address filtering, compression/charset handling, whole content-addressed captures, cancellation, literal authority grants and raw operator output                                                                                                                                                                                                                                          |
 | `rho-browser`: browser/tab ownership, actions, snapshots and cleanup                                                    | `browser.ts`, `browser-session.ts`                                                                             | `browser.test.ts` with Chromium: shared cookies, per-run tabs, serialized actions, stale refs, frame refs, PNG capture, cyclic/deep/non-finite evaluation results, cancellation, idle retirement and popup cleanup                                                                                                                                                                                                                                                          |
 | `rho-mcp`: settings, curation, documents, transports, OAuth and conversation mounts                                     | `mcp.ts`, `mcp-settings.ts`, `mcp-curation.ts`, `mcp-exchange.ts`, `mcp-session.ts`, `mcp-sessions.ts`         | `mcp.test.ts`, `mcp-exchange.test.ts`, `mcp-session.test.ts`, `mcp-sessions.test.ts`, `captured-mcp.test.ts`: exact names/budgets, isolated bad rows, media/results, narrow client capabilities, transport cancellation, session replacement and captured attachment anchors; post-login catalog publication without restarting unchanged servers; OAuth credential completion and refresh also use the Core `integration.test.ts` and `integration-refresh.test.ts` suites |
 | `rho-acp`: authentication, sessions, config, slash commands, history, held questions and editor facilities              | `editor.ts`, `editor-auth.ts`, `editor-bridge.ts`, `editor-replay.ts`, CLI adapter                             | `editor.test.ts`, `editor-replay.test.ts`, `editor-permissions.test.ts`, `editor-auth.test.ts`, `runtime.test.ts`, CLI `nexus.test.ts`: authored Human admission, launch defaults, skill commands, runner-scoped roots, paginated role-aware replay, Side context, owned held-work recovery, shared grants, permission cancellation, unsaved buffers and detachment without canceling work                                                                                          |
@@ -663,7 +751,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 | Package                | Reference anchors beneath its `test/` directory                                                                                                                      | Local evidence beneath `test/`                                                                |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `rho`                  | `api_key_connection_test.rb`, `host_follower_test.rb`, `execution_policy_test.rb`, `package_activation_test.rb`, `memory_review_test.rb`, `until_test.rb`, `channels_routines_inbox_test.rb`, `skill_drafts_test.rb` | `runtime`, `application`, `lifecycle`, `packages`, `memory-review`, `until`, `channels`, `inbox`, `routines`, `skill-drafts`, `superagent`, `speakers` |
-| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb`, `deadline_extension_test.rb` | `executor`, `claims`, `claim-control`, `claim-progress`, `runner`, `mutation`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
+| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb`, `webrtc_connection_test.rb`, `deadline_extension_test.rb` | `executor`, `claims`, `claim-control`, `claim-progress`, `runner`, `mutation`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
 | `rho-codemode`         | `code_test.rb`, `runtime_test.rb`, `claim_bridge_test.rb`                                                                                                            | `code`, `executor`                                                                            |
 | `rho-web-tools`        | `client_test.rb`, `render_test.rb`, `commands_test.rb`                                                                                                               | `web`, `policy`, `dev`                                                                        |
 | `rho-browser`          | `tools_test.rb`, `session_test.rb`, `session_idle_test.rb`, `session_popups_test.rb`                                                                                 | `browser` with real Chromium                                                                  |
@@ -671,7 +759,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 | `rho-acp`              | `acp/reference_replay_test.rb`, `acp/recovery_attach_test.rb`, `acp/permissions_test.rb`, `acp/materialization_test.rb`                                              | `editor-replay`, `editor-permissions`, `editor`, `application`, `runtime`                     |
 | `rho-acp-client`       | `tool_test.rb`, `children_test.rb`, `policy_test.rb`, `cancel_reuse_test.rb`, `child_retirement_test.rb`                                                            | `acp`, `attachments`, `adapters`, `runner-policy`                                             |
 | `rho-ingress-telegram` | `routing_test.rb`, `input_batch_test.rb`, `recovery_test.rb`, `delivery_test.rb`, `worker_result_delivery_test.rb`, `personal_reach_outbox_test.rb`                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport`, `telegram-outbox` |
-| `rho-dev`              | `dev_commands/inspection_test.rb`, `dev_commands/execution_test.rb`, `dev_commands/stream_test.rb`, `dev_commands/conversations_test.rb`                             | `dev`, `dev-worker`, `operations`                                                             |
+| `rho-dev`              | `dev_commands/inspection_test.rb`, `dev_commands/execution_test.rb`, `dev_commands/stream_test.rb`, `dev_commands/conversations_test.rb`, `dev_commands/environment_test.rb`, `dev_commands/prompt_test.rb`, `dev_watch_test.rb`                             | `dev`, `dev-worker`, `operations`                                                             |
 
 Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
 `packages/nexus-ui`; runtime changes use its existing bridge and management UI.

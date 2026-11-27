@@ -277,7 +277,7 @@ test("terminal runs capture placement, ask for approval and return before the sh
   }
 })
 
-test("history forwards include_tool_outputs alongside the execution details it implies", async () => {
+test("history forwards the caller's execution and tool-output selections", async () => {
   const queries: Record<string, string>[] = []
   const fixture = storeFixture(async (request) => {
     const url = new URL(request.url)
@@ -303,11 +303,9 @@ test("history forwards include_tool_outputs alongside the execution details it i
 
   try {
     await app.operations.command({ action: "history", conversation: "conversation", include_tool_outputs: true })
+    await app.operations.command({ action: "history", conversation: "conversation", include_execution: true })
     await app.operations.command({ action: "history", conversation: "conversation" })
-    expect(queries).toEqual([
-      { include_execution: "true", include_tool_outputs: "true" },
-      { include_execution: "true" },
-    ])
+    expect(queries).toEqual([{ include_tool_outputs: "true" }, { include_execution: "true" }, {}])
   } finally {
     fixture.server.stop(true)
   }
