@@ -817,7 +817,7 @@ describe("MCP OAuth connections", () => {
               Effect.flatMap((credential) =>
                 McpOAuth.connectProvider({
                   server: "probe",
-                  config: remote(as.url),
+                  target: target(remote(as.url)),
                   credential,
                   readOnly: true,
                 }),
