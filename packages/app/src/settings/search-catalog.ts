@@ -154,6 +154,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "new timeline redesign activity explored edited ran grouping status",
   },
   // Matches questionComposerAvailable in settings/model.tsx; that module is too heavy to import here.
+  // Playwright imports this module in plain Node, where Vite never injects import.meta.env.
   ...(import.meta.env?.VITE_OPENCODE_CHANNEL === "local" || import.meta.env?.VITE_OPENCODE_CHANNEL === "dev"
     ? [
         {
