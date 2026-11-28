@@ -1,6 +1,5 @@
 export * as FileSystem from "./filesystem.js"
 
-import path from "node:path"
 import { Archive, Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
