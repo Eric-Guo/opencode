@@ -1289,6 +1289,7 @@ export const layer = (options?: Options) =>
                   server,
                   tool: input.name,
                   message: `MCP tool "${input.name}" on ${owner} "${server}" failed: ${error.message}`,
+                  code: "code" in error && typeof error.code === "number" ? error.code : undefined,
                 }),
             )
           // An attached client owns the tools it lists, even when a configured server shares its name, and
