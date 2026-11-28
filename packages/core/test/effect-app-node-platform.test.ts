@@ -158,7 +158,7 @@ describe("workerd WebSocketConstructor", () => {
 describe.skipIf(process.platform === "win32")("websocket-constructor bundle conditions", () => {
   test("workerd conditions use global WebSocket without Node ws or proxy agents", async () => {
     const output = await bundle(["workerd"])
-    expect(output).not.toContain("@effect/platform-node/NodeWS")
+    expect(output).not.toContain('from "ws"')
     expect(output).not.toContain("http-proxy-agent")
     expect(output).not.toContain("https-proxy-agent")
     expect(output).toContain("layerWebSocketConstructorGlobal")
@@ -166,15 +166,15 @@ describe.skipIf(process.platform === "win32")("websocket-constructor bundle cond
 
   test("bun conditions use Bun WebSocket without Node ws or proxy agents", async () => {
     const output = await bundle(["bun"])
-    expect(output).not.toContain("@effect/platform-node/NodeWS")
+    expect(output).not.toContain('from "ws"')
     expect(output).not.toContain("http-proxy-agent")
     expect(output).not.toContain("https-proxy-agent")
     expect(output).toContain("globalThis.WebSocket")
   })
 
-  test.each([[["node"]], [[]]])("%p conditions select NodeWS and proxy agents", async (conditions) => {
+  test.each([[["node"]], [[]]])("%p conditions select the ws constructor and proxy agents", async (conditions) => {
     const output = await bundle(conditions)
-    expect(output).toContain("@effect/platform-node/NodeWS")
+    expect(output).toContain('from "ws"')
     expect(output).toContain("http-proxy-agent")
     expect(output).toContain("https-proxy-agent")
   })
