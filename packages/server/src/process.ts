@@ -18,7 +18,6 @@ import { join } from "node:path"
 import type { NexusRuntime } from "@opencode/nexus-runtime"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Session } from "@opencode/core/session"
-import { nexusEnabled } from "./handlers/nexus"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -186,14 +185,6 @@ const startScoped = Effect.fnUntraced(function* <E = never, R = never>(
           await (await runtime?.catch(() => undefined))?.close()
         }),
       )
-      const { existsSync } = yield* Effect.promise(() => import("node:fs"))
-      if (existsSync(join(storage, "settings.json")))
-        yield* nexusEnabled.pipe(
-          Effect.provide(Layer.succeedContext(context)),
-          Effect.flatMap((enabled) => (enabled ? Effect.tryPromise(get) : Effect.void)),
-          Effect.catch((cause) => Effect.logWarning("Nexus setup could not be restored", { cause })),
-          Effect.forkIn(applicationScope),
-        )
       yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
         Effect.provideService(Scope.Scope, applicationScope),
       )
